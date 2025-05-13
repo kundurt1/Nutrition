@@ -1,0 +1,14 @@
+# Large data
+nutrition-backend/Data/*.csv
+nutrition-backend/Data/*.json
+
+# Safe keepers
+!nutrition-backend/Data/recipe_chunks/
+
+# Common ignore rules
+*.pyc
+__pycache__/
+.env
+.venv/
+.ipynb_checkpoints/
+

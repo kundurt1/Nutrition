@@ -1,0 +1,10 @@
+## Final Recipe Schema
+
+- title: (string)
+- ingredients: List of {quantity, unit, name}
+- directions: List of steps
+- cuisine: (normalized)
+- diet: (normalized)
+- tags: (diet + cuisine + course)
+- macro_estimate: {calories, protein, carbs, fat}
+- cost_estimate: float
