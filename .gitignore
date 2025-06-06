@@ -12,3 +12,50 @@ __pycache__/
 .venv/
 .ipynb_checkpoints/
 
+# ================================
+# React/Vite Frontend
+# ================================
+
+# Dependencies
+nutrition-frontend/node_modules/
+nutrition-frontend/jspm_packages/
+
+# Production builds
+nutrition-frontend/dist/
+nutrition-frontend/build/
+nutrition-frontend/.vite/
+
+# Environment files (IMPORTANT - contains Supabase keys)
+nutrition-frontend/.env
+nutrition-frontend/.env.local
+nutrition-frontend/.env.development.local
+nutrition-frontend/.env.test.local
+nutrition-frontend/.env.production.local
+
+# Logs
+nutrition-frontend/npm-debug.log*
+nutrition-frontend/yarn-debug.log*
+nutrition-frontend/yarn-error.log*
+nutrition-frontend/pnpm-debug.log*
+nutrition-frontend/lerna-debug.log*
+
+# Editor files
+nutrition-frontend/.vscode/*
+!nutrition-frontend/.vscode/extensions.json
+nutrition-frontend/.idea
+nutrition-frontend/.DS_Store
+nutrition-frontend/*.suo
+nutrition-frontend/*.ntvs*
+nutrition-frontend/*.njsproj
+nutrition-frontend/*.sln
+nutrition-frontend/*.sw?
+
+# Testing & Coverage
+nutrition-frontend/coverage/
+nutrition-frontend/.coverage/
+nutrition-frontend/.eslintcache
+
+# Capacitor mobile builds (when you add mobile later)
+nutrition-frontend/android/
+nutrition-frontend/ios/
+nutrition-frontend/.capacitor/
