@@ -149,12 +149,7 @@ export default function Preferences() {
           <option value="vegetarian">Vegetarian</option>
         </select>
 
-        <div className="diet-options">
-          <div className="diet-item">Meat Item</div>
-          <div className="diet-item">Meat Item</div>
-          <div className="diet-item">Meat Item</div>
-          <div className="diet-item">Meat Item</div>
-        </div>
+
       </div>
 
       <button 

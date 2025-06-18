@@ -14,7 +14,8 @@ export default function SignIn() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
-          navigate('/preferences')
+          navigate('/home');
+
         }
       } catch (error) {
         console.log('No session found:', error)

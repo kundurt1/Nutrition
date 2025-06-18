@@ -68,6 +68,9 @@ export default function GroceryList() {
       'canned tomatoes', 'tomato paste', 'coconut milk', 'broth',
       'chicken broth', 'vegetable broth', 'beef broth'
     ],
+    'Recipe Generated': [
+      // This will catch items added from recipes
+    ],
     'Frozen and Misc': [
       'frozen vegetables', 'frozen fruit', 'frozen pizza', 'ice cream',
       'frozen dinners', 'frozen chicken', 'frozen fish', 'frozen shrimp',
@@ -93,6 +96,23 @@ export default function GroceryList() {
     return 'Uncategorized'
   }
 
+  // Function to refresh items from database
+  const fetchItems = async (userId) => {
+    const { data: groceryItems, error: itemsError } = await supabase
+      .from('grocery_items')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+
+    if (itemsError) {
+      console.error('Error fetching grocery items:', itemsError)
+      return []
+    } else {
+      console.log('Fetched grocery items:', groceryItems) // Debug log
+      return groceryItems || []
+    }
+  }
+
   // Check authentication and fetch items
   useEffect(() => {
     const checkUserAndFetchItems = async () => {
@@ -107,25 +127,51 @@ export default function GroceryList() {
       }
 
       setUser(user)
-
-      // Fetch grocery items
-      const { data: groceryItems, error: itemsError } = await supabase
-        .from('grocery_items')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-
-      if (itemsError) {
-        console.error('Error fetching grocery items:', itemsError)
-      } else {
-        setItems(groceryItems || [])
-      }
-
+      const groceryItems = await fetchItems(user.id)
+      setItems(groceryItems)
       setLoading(false)
     }
 
     checkUserAndFetchItems()
   }, [navigate])
+
+  // Add effect to listen for real-time updates
+  useEffect(() => {
+    if (!user) return
+
+    // Set up real-time listener for grocery_items table
+    const channel = supabase
+      .channel('grocery_items_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'grocery_items',
+          filter: `user_id=eq.${user.id}`
+        },
+        async (payload) => {
+          console.log('Real-time update received:', payload)
+          // Refresh the items when changes occur
+          const updatedItems = await fetchItems(user.id)
+          setItems(updatedItems)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user])
+
+  // Add a manual refresh function
+  const refreshItems = async () => {
+    if (!user) return
+    setLoading(true)
+    const groceryItems = await fetchItems(user.id)
+    setItems(groceryItems)
+    setLoading(false)
+  }
 
   const addItem = async () => {
     if (!input.trim() || !user) return
@@ -138,7 +184,10 @@ export default function GroceryList() {
       name: input.trim(),
       quantity: quantity.trim() || '1',
       unit: unit || '',
-      category: category
+      category: category,
+      item_name: input.trim(), // Add this field too for consistency
+      estimated_cost: 0.0, // Default cost
+      is_purchased: false
     }
     
     const { data, error } = await supabase
@@ -178,9 +227,32 @@ export default function GroceryList() {
     setLoading(false)
   }
 
+  // Toggle purchased status
+  const togglePurchased = async (id, currentStatus) => {
+    setLoading(true)
+    
+    const { error } = await supabase
+      .from('grocery_items')
+      .update({ 
+        is_purchased: !currentStatus,
+        purchased_at: !currentStatus ? new Date().toISOString() : null
+      })
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error updating item:', error)
+      alert('Failed to update item')
+    } else {
+      const updatedItems = await fetchItems(user.id)
+      setItems(updatedItems)
+    }
+    
+    setLoading(false)
+  }
+
   // Group items by category
   const groupedItems = items.reduce((acc, item) => {
-    const category = item.category
+    const category = item.category || 'Uncategorized'
     if (!acc[category]) {
       acc[category] = []
     }
@@ -189,6 +261,7 @@ export default function GroceryList() {
   }, {})
 
   const categories = [
+    'Recipe Generated', // Show recipe items first
     'Proteins',
     'Produce', 
     'Grains and Carbs',
@@ -205,14 +278,73 @@ export default function GroceryList() {
     )
   }
 
+  // Count total items and purchased items
+  const totalItems = items.length
+  const purchasedItems = items.filter(item => item.is_purchased).length
+  const unpurchasedItems = totalItems - purchasedItems
+  const totalCost = items.reduce((sum, item) => sum + (parseFloat(item.estimated_cost) || 0), 0)
+
   return (
     <div className="card">
-      <div className="header">
-        <button className="back-button" onClick={() => navigate('/preferences')}>
-          ←
-        </button>
-        <h2>Grocery List</h2>
+      <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button className="back-button" onClick={() => navigate('/generate')} style={{
+            padding: '8px 12px',
+            backgroundColor: '#9E9E9E',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}>
+            ← Generate
+          </button>
+          <h2 style={{ margin: 0 }}>Grocery List</h2>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button 
+            onClick={refreshItems}
+            disabled={loading}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            {loading ? '...' : 'Refresh'}
+          </button>
+          <div style={{ fontSize: '14px', color: '#666' }}>
+            {unpurchasedItems} items • ${totalCost.toFixed(2)}
+          </div>
+        </div>
       </div>
+
+      {/* Summary Stats */}
+      {totalItems > 0 && (
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '12px', 
+          backgroundColor: '#f5f5f5', 
+          borderRadius: '8px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <strong>Total: {totalItems} items</strong>
+            {purchasedItems > 0 && (
+              <span style={{ marginLeft: '16px', color: '#4CAF50' }}>
+                ✓ {purchasedItems} purchased
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#4CAF50' }}>
+            Estimated Cost: ${totalCost.toFixed(2)}
+          </div>
+        </div>
+      )}
 
       {/* Show categories with items */}
       <div className="categories-with-items">
@@ -220,63 +352,177 @@ export default function GroceryList() {
           const categoryItems = groupedItems[category] || []
           const hasItems = categoryItems.length > 0
           
+          if (!hasItems) return null // Don't show empty categories
+          
           return (
-            <div key={category} className={`category-section ${hasItems ? 'has-items' : ''}`}>
-              <div className="category-header">
-                <h3 className="category-title">{category}</h3>
-                {hasItems && <span className="item-count">({categoryItems.length})</span>}
+            <div key={category} className={`category-section ${hasItems ? 'has-items' : ''}`} style={{
+              marginBottom: '24px',
+              border: '1px solid #ddd',
+              borderRadius: '8px',
+              padding: '16px'
+            }}>
+              <div className="category-header" style={{ marginBottom: '12px' }}>
+                <h3 className="category-title" style={{ 
+                  margin: 0, 
+                  color: category === 'Recipe Generated' ? '#4CAF50' : '#333',
+                  fontSize: '18px'
+                }}>
+                  {category === 'Recipe Generated' ? '🍳 From Recipes' : category}
+                </h3>
+                <span className="item-count" style={{ color: '#666', fontSize: '14px' }}>
+                  ({categoryItems.length} items)
+                </span>
               </div>
               
-              {hasItems && (
-                <div className="category-items">
-                  {categoryItems.map((item) => (
-                    <div key={item.id} className="item">
-                      <div className="item-info">
-                        <span className="item-name">{item.name}</span>
-                        <span className="item-details">
-                          {item.quantity} {item.unit}
-                        </span>
-                      </div>
+              <div className="category-items">
+                {categoryItems.map((item) => (
+                  <div key={item.id} className="item" style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px 0',
+                    borderBottom: '1px solid #eee',
+                    opacity: item.is_purchased ? 0.6 : 1
+                  }}>
+                    <div className="item-info" style={{ flex: 1 }}>
+                      <span className="item-name" style={{
+                        fontWeight: 'bold',
+                        textDecoration: item.is_purchased ? 'line-through' : 'none'
+                      }}>
+                        {item.name}
+                      </span>
+                      <span className="item-details" style={{ 
+                        marginLeft: '8px', 
+                        color: '#666',
+                        fontSize: '14px'
+                      }}>
+                        {item.quantity} {item.unit}
+                        {item.estimated_cost > 0 && (
+                          <span style={{ marginLeft: '8px', color: '#4CAF50' }}>
+                            ${parseFloat(item.estimated_cost).toFixed(2)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        onClick={() => togglePurchased(item.id, item.is_purchased)}
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: item.is_purchased ? '#4CAF50' : '#2196F3',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                        disabled={loading}
+                      >
+                        {item.is_purchased ? '✓' : 'Buy'}
+                      </button>
                       <button 
                         onClick={() => removeItem(item.id)} 
                         className="remove-btn"
                         title="Remove item"
                         disabled={loading}
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: '#f44336',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
                       >
                         ×
                       </button>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
             </div>
           )
         })}
         
         {/* Show uncategorized items if any */}
         {groupedItems['Uncategorized'] && groupedItems['Uncategorized'].length > 0 && (
-          <div className="category-section has-items">
-            <div className="category-header">
-              <h3 className="category-title">Other Items</h3>
-              <span className="item-count">({groupedItems['Uncategorized'].length})</span>
+          <div className="category-section has-items" style={{
+            marginBottom: '24px',
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            padding: '16px'
+          }}>
+            <div className="category-header" style={{ marginBottom: '12px' }}>
+              <h3 className="category-title" style={{ margin: 0, fontSize: '18px' }}>Other Items</h3>
+              <span className="item-count" style={{ color: '#666', fontSize: '14px' }}>
+                ({groupedItems['Uncategorized'].length} items)
+              </span>
             </div>
             <div className="category-items">
               {groupedItems['Uncategorized'].map((item) => (
-                <div key={item.id} className="item">
-                  <div className="item-info">
-                    <span className="item-name">{item.name}</span>
-                    <span className="item-details">
+                <div key={item.id} className="item" style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '8px 0',
+                  borderBottom: '1px solid #eee',
+                  opacity: item.is_purchased ? 0.6 : 1
+                }}>
+                  <div className="item-info" style={{ flex: 1 }}>
+                    <span className="item-name" style={{
+                      fontWeight: 'bold',
+                      textDecoration: item.is_purchased ? 'line-through' : 'none'
+                    }}>
+                      {item.name}
+                    </span>
+                    <span className="item-details" style={{ 
+                      marginLeft: '8px', 
+                      color: '#666',
+                      fontSize: '14px'
+                    }}>
                       {item.quantity} {item.unit}
+                      {item.estimated_cost > 0 && (
+                        <span style={{ marginLeft: '8px', color: '#4CAF50' }}>
+                          ${parseFloat(item.estimated_cost).toFixed(2)}
+                        </span>
+                      )}
                     </span>
                   </div>
-                  <button 
-                    onClick={() => removeItem(item.id)} 
-                    className="remove-btn"
-                    title="Remove item"
-                    disabled={loading}
-                  >
-                    ×
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      onClick={() => togglePurchased(item.id, item.is_purchased)}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: item.is_purchased ? '#4CAF50' : '#2196F3',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                      disabled={loading}
+                    >
+                      {item.is_purchased ? '✓' : 'Buy'}
+                    </button>
+                    <button 
+                      onClick={() => removeItem(item.id)} 
+                      className="remove-btn"
+                      title="Remove item"
+                      disabled={loading}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#f44336',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -284,8 +530,9 @@ export default function GroceryList() {
         )}
       </div>
 
-      <div className="add-item-section">
-        <div className="input-row">
+      <div className="add-item-section" style={{ marginTop: '32px', padding: '16px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+        <h3 style={{ marginTop: 0 }}>Add Manual Item</h3>
+        <div className="input-row" style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
           <input
             type="text"
             placeholder="Item name (e.g., chicken, apples)"
@@ -294,6 +541,7 @@ export default function GroceryList() {
             onKeyPress={(e) => e.key === 'Enter' && addItem()}
             className="item-input"
             disabled={loading}
+            style={{ flex: 2, padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
           />
           <input
             type="number"
@@ -305,12 +553,14 @@ export default function GroceryList() {
             min="0"
             step="0.1"
             disabled={loading}
+            style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
           />
           <select
             value={unit}
             onChange={(e) => setUnit(e.target.value)}
             className="unit-select"
             disabled={loading}
+            style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
           >
             {units.map((unitOption) => (
               <option key={unitOption} value={unitOption}>
@@ -318,12 +568,24 @@ export default function GroceryList() {
               </option>
             ))}
           </select>
-          <button className="add-btn" onClick={addItem} disabled={loading || !input.trim()}>
+          <button 
+            className="add-btn" 
+            onClick={addItem} 
+            disabled={loading || !input.trim()}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
             {loading ? '...' : 'Add'}
           </button>
         </div>
         {input.trim() && (
-          <div className="category-preview">
+          <div className="category-preview" style={{ fontSize: '14px', color: '#666' }}>
             Will be added to: <strong>{categorizeItem(input)}</strong>
             {quantity && (
               <span className="quantity-preview">
@@ -334,12 +596,36 @@ export default function GroceryList() {
         )}
       </div>
 
-      <div className="action-buttons">
-        <button className="secondary" disabled={items.length === 0}>
-          Place DoorDash Order ({items.length} items)
+      <div className="action-buttons" style={{ marginTop: '24px', display: 'flex', gap: '12px' }}>
+        <button 
+          className="secondary" 
+          disabled={unpurchasedItems === 0}
+          style={{
+            flex: 1,
+            padding: '12px',
+            backgroundColor: unpurchasedItems > 0 ? '#FF9800' : '#ccc',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: unpurchasedItems > 0 ? 'pointer' : 'not-allowed'
+          }}
+        >
+          Place DoorDash Order ({unpurchasedItems} items)
         </button>
-        <button className="secondary" disabled={items.length === 0}>
-          Place Instacart Order ({items.length} items)
+        <button 
+          className="secondary" 
+          disabled={unpurchasedItems === 0}
+          style={{
+            flex: 1,
+            padding: '12px',
+            backgroundColor: unpurchasedItems > 0 ? '#4CAF50' : '#ccc',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: unpurchasedItems > 0 ? 'pointer' : 'not-allowed'
+          }}
+        >
+          Place Instacart Order ({unpurchasedItems} items)
         </button>
       </div>
     </div>
