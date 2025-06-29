@@ -12,11 +12,12 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 from datetime import datetime, timedelta,date
 
-from typing import Optional
+from typing import Optional, List, Dict
+import uuid
 from rapidfuzz import fuzz
 from typing import Optional
 from fastapi import Query
-
+import uuid
 
 
 
@@ -78,6 +79,38 @@ class SingleRecipeRequest(BaseModel):
     exclude_recipes: Optional[list] = []
 
 
+class RateRecipeRequest(BaseModel):
+    user_id: str
+    recipe_id: Optional[str] = None  # Changed to str to handle UUID
+    recipe_data: Optional[dict] = None  # For rating generated recipes not yet saved
+    rating: int
+    feedback_reason: Optional[str] = None
+
+class UserPreferenceUpdate(BaseModel):
+    user_id: str
+    disliked_ingredients: List[str]
+    disliked_cuisines: List[str]
+    preferred_ingredients: List[str]
+# New Pydantic models for favorites
+class AddFavoriteRequest(BaseModel):
+    user_id: str
+    recipe_id: Optional[str] = None  # For saved recipes
+    recipe_data: Optional[dict] = None  # For generated recipes
+    recipe_name: str
+    notes: Optional[str] = None
+
+class RemoveFavoriteRequest(BaseModel):
+    user_id: str
+    favorite_id: str
+
+class CreateCollectionRequest(BaseModel):
+    user_id: str
+    name: str
+    description: Optional[str] = None
+
+class AddToCollectionRequest(BaseModel):
+    collection_id: str
+    favorite_id: str
 
 # Root check
 @app.get("/")
@@ -971,3 +1004,466 @@ def mark_item_purchased(item_id: int, user_id: str = Query(...)):
     except Exception as e:
         print(f"Error in mark_item_purchased: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to mark item as purchased: {str(e)}")
+
+
+import re
+from typing import Dict, List
+
+
+def normalize_ingredient_name(name: str) -> str:
+    """
+    Normalize ingredient names to consolidate similar items.
+    """
+    if not name:
+        return 'unknown'
+
+    # Convert to lowercase and remove extra whitespace
+    normalized = name.lower().strip()
+
+    # Remove common cooking descriptors that don't change the base ingredient
+    descriptors_to_remove = [
+        'diced', 'chopped', 'sliced', 'minced', 'crushed', 'grated',
+        'fresh', 'dried', 'frozen', 'canned', 'cooked', 'raw',
+        'boneless', 'skinless', 'lean', 'ground', 'whole',
+        'large', 'medium', 'small', 'extra', 'jumbo',
+        'organic', 'free-range', 'grass-fed'
+    ]
+
+    # Remove descriptors (use word boundaries to avoid partial matches)
+    for descriptor in descriptors_to_remove:
+        pattern = rf'\b{descriptor}\s+'
+        normalized = re.sub(pattern, '', normalized, flags=re.IGNORECASE)
+
+    # Handle specific ingredient mappings - RICE AND PASTA REMOVED
+    ingredient_mappings = {
+        # Chicken variations
+        'chicken breast': 'chicken',
+        'chicken thigh': 'chicken',
+        'chicken thighs': 'chicken',
+        'chicken leg': 'chicken',
+        'chicken drumstick': 'chicken',
+        'chicken wing': 'chicken',
+        'chicken tender': 'chicken',
+
+        # Beef variations
+        'ground beef': 'beef',
+        'beef chuck': 'beef',
+        'beef sirloin': 'beef',
+        'steak': 'beef',
+        'beef steak': 'beef',
+
+        # Pork variations
+        'pork chop': 'pork',
+        'pork shoulder': 'pork',
+        'pork loin': 'pork',
+
+        # Onion variations
+        'yellow onion': 'onion',
+        'white onion': 'onion',
+        'red onion': 'onion',
+        'sweet onion': 'onion',
+
+        # Tomato variations
+        'roma tomato': 'tomato',
+        'cherry tomato': 'tomato',
+        'grape tomato': 'tomato',
+        'beefsteak tomato': 'tomato',
+
+        # Pepper variations
+        'bell pepper': 'bell pepper',
+        'red bell pepper': 'bell pepper',
+        'green bell pepper': 'bell pepper',
+        'yellow bell pepper': 'bell pepper',
+
+        # Garlic variations
+        'garlic clove': 'garlic',
+        'garlic bulb': 'garlic'
+
+        # NOTE: Rice and pasta mappings have been removed so they stay distinct
+        # (e.g., jasmine rice, basmati rice, penne, spaghetti will remain separate)
+    }
+
+    # Apply specific mappings
+    for variant, base in ingredient_mappings.items():
+        if variant in normalized:
+            normalized = base
+            break
+
+    # Clean up any remaining extra spaces
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+    return normalized if normalized else name.lower()
+
+
+def get_display_name(normalized_name: str, original_name: str) -> str:
+    """
+    Create a user-friendly display name for consolidated ingredients.
+    """
+    # Common ingredients that should use the normalized name
+    common_ingredients = [
+        'chicken', 'beef', 'pork', 'fish', 'turkey', 'lamb',
+        'onion', 'tomato', 'garlic', 'carrot', 'celery',
+        'rice', 'pasta', 'bread', 'cheese', 'milk', 'eggs'
+    ]
+
+    if normalized_name in common_ingredients:
+        return normalized_name.capitalize()
+
+    # For less common ingredients, use the original name but capitalized
+    return original_name.capitalize()
+
+
+# Updated save_grocery_list function with consolidation
+@app.post("/save-grocery-list")
+def save_grocery_list(req: SaveGroceryListRequest):
+    try:
+        if not req.user_id:
+            raise HTTPException(status_code=400, detail="User ID is required")
+
+        if not req.grocery_items or len(req.grocery_items) == 0:
+            raise HTTPException(status_code=400, detail="No grocery items provided")
+
+        print(f"Received request: user_id={req.user_id}, items={len(req.grocery_items)}")
+
+        # First, consolidate the incoming items before processing
+        consolidated_items = {}
+        for item in req.grocery_items:
+            normalized_name = normalize_ingredient_name(item.item_name)
+
+            if normalized_name in consolidated_items:
+                # Combine quantities and costs
+                consolidated_items[normalized_name]['quantity'] += item.quantity
+                consolidated_items[normalized_name]['estimated_cost'] += item.estimated_cost
+                consolidated_items[normalized_name]['original_names'].append(item.item_name)
+            else:
+                consolidated_items[normalized_name] = {
+                    'item_name': get_display_name(normalized_name, item.item_name),
+                    'quantity': item.quantity,
+                    'estimated_cost': item.estimated_cost,
+                    'category': item.category or "Recipe Generated",
+                    'is_purchased': False,
+                    'original_names': [item.item_name]
+                }
+
+        # Now process the consolidated items
+        grocery_items_to_insert = []
+        updated_items_count = 0
+        current_time = datetime.now().isoformat()
+
+        for normalized_name, consolidated_item in consolidated_items.items():
+            print(
+                f"Processing consolidated item: {consolidated_item['item_name']}, quantity: {consolidated_item['quantity']}")
+
+            # Check if a similar item already exists in user's grocery list
+            # We'll check against both the normalized name and the display name
+            existing_item_query = supabase.table("grocery_items") \
+                .select("id, quantity, estimated_cost, name") \
+                .eq("user_id", req.user_id) \
+                .eq("is_purchased", False) \
+                .execute()
+
+            existing_item = None
+            if existing_item_query.data:
+                # Check if any existing item matches our normalized name
+                for existing in existing_item_query.data:
+                    existing_normalized = normalize_ingredient_name(existing.get("name", ""))
+                    if existing_normalized == normalized_name:
+                        existing_item = existing
+                        break
+
+            if existing_item:
+                # Update existing item by adding quantities and costs
+                current_quantity = float(existing_item.get("quantity", "0"))
+                current_cost = float(existing_item.get("estimated_cost", 0))
+
+                new_quantity = current_quantity + consolidated_item['quantity']
+                new_cost = current_cost + consolidated_item['estimated_cost']
+
+                print(
+                    f"Updating existing item: {consolidated_item['item_name']}, new_quantity: {new_quantity}, new_cost: {new_cost}")
+
+                update_result = supabase.table("grocery_items") \
+                    .update({
+                    "quantity": str(new_quantity),
+                    "estimated_cost": round(new_cost, 2),
+                    "updated_at": current_time
+                }) \
+                    .eq("id", existing_item["id"]) \
+                    .execute()
+
+                print(f"Update result: {update_result}")
+                updated_items_count += 1
+            else:
+                # Add new consolidated item
+                item_to_insert = {
+                    "user_id": req.user_id,
+                    "name": consolidated_item['item_name'],
+                    "quantity": str(consolidated_item['quantity']),
+                    "unit": "",
+                    "category": consolidated_item['category'],
+                    "is_purchased": consolidated_item['is_purchased'],
+                    "item_name": consolidated_item['item_name'],
+                    "estimated_cost": round(consolidated_item['estimated_cost'], 2),
+                    "created_at": current_time,
+                    "updated_at": current_time
+                }
+
+                print(f"Preparing to insert consolidated item: {item_to_insert}")
+                grocery_items_to_insert.append(item_to_insert)
+
+        # Insert new items in batch
+        inserted_items = []
+        if grocery_items_to_insert:
+            print(f"Inserting {len(grocery_items_to_insert)} consolidated items")
+            insert_result = supabase.table("grocery_items").insert(grocery_items_to_insert).execute()
+
+            if hasattr(insert_result, 'error') and insert_result.error:
+                print(f"Insert error: {insert_result.error}")
+                raise HTTPException(status_code=500, detail=f"Database insert error: {insert_result.error}")
+
+            if hasattr(insert_result, 'data') and insert_result.data:
+                inserted_items = insert_result.data
+
+        total_items_affected = len(inserted_items)
+        total_original_items = len(req.grocery_items)
+        total_consolidated_items = len(consolidated_items)
+
+        print(f"Summary: {total_original_items} original items consolidated into {total_consolidated_items} items")
+        print(f"Database: inserted={total_items_affected}, updated={updated_items_count}")
+
+        return {
+            "success": True,
+            "message": f"Successfully consolidated {total_original_items} items into {total_consolidated_items} unique ingredients",
+            "inserted_items": total_items_affected,
+            "updated_items": updated_items_count,
+            "total_cost": round(sum(item['estimated_cost'] for item in consolidated_items.values()), 2),
+            "consolidation_summary": {
+                "original_items": total_original_items,
+                "consolidated_items": total_consolidated_items,
+                "items_saved": total_original_items - total_consolidated_items
+            }
+        }
+
+    except Exception as e:
+        print(f"Error in save_grocery_list: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to save grocery list: {str(e)}")
+    
+# Helper function to analyze feedback and update preferences
+def update_user_preferences_from_rating(user_id: str, rating: int, feedback_reason: str, recipe_data: dict):
+    """
+    Analyze the rating and feedback to update user preferences
+    """
+    try:
+        # Get current preferences or create new ones
+        current_prefs = supabase.table("user_preference_patterns") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .limit(1) \
+            .execute()
+        
+        if current_prefs.data and len(current_prefs.data) > 0:
+            prefs = current_prefs.data[0]
+            disliked_ingredients = prefs.get("disliked_ingredients", [])
+            disliked_cuisines = prefs.get("disliked_cuisines", [])
+            preferred_ingredients = prefs.get("preferred_ingredients", [])
+            preferred_cuisines = prefs.get("preferred_cuisines", [])
+        else:
+            disliked_ingredients = []
+            disliked_cuisines = []
+            preferred_ingredients = []
+            preferred_cuisines = []
+
+        # If rating is low (1-2), analyze what to avoid
+        if rating <= 2:
+            recipe_ingredients = [ing.get("name", "").lower() for ing in recipe_data.get("ingredients", [])]
+            recipe_cuisine = recipe_data.get("cuisine", "").lower()
+            
+            # Add ingredients/cuisine to disliked based on feedback
+            if feedback_reason == "Too many ingredients I don't like":
+                # Add some ingredients to disliked list
+                for ingredient in recipe_ingredients:
+                    if ingredient and ingredient not in disliked_ingredients:
+                        disliked_ingredients.append(ingredient)
+                        
+            elif feedback_reason == "Don't like this cuisine":
+                if recipe_cuisine and recipe_cuisine not in disliked_cuisines:
+                    disliked_cuisines.append(recipe_cuisine)
+        
+        # If rating is high (4-5), add to preferred
+        elif rating >= 4:
+            recipe_ingredients = [ing.get("name", "").lower() for ing in recipe_data.get("ingredients", [])]
+            recipe_cuisine = recipe_data.get("cuisine", "").lower()
+            
+            # Add to preferred (limit to top 3 ingredients per recipe to avoid noise)
+            for ingredient in recipe_ingredients[:3]:
+                if ingredient and ingredient not in preferred_ingredients and ingredient not in disliked_ingredients:
+                    preferred_ingredients.append(ingredient)
+                    
+            if recipe_cuisine and recipe_cuisine not in preferred_cuisines:
+                preferred_cuisines.append(recipe_cuisine)
+
+        # Update or insert preferences
+        preference_data = {
+            "user_id": user_id,
+            "disliked_ingredients": disliked_ingredients[-20:],  # Keep last 20 to avoid huge lists
+            "disliked_cuisines": disliked_cuisines[-10:],
+            "preferred_ingredients": preferred_ingredients[-20:],
+            "preferred_cuisines": preferred_cuisines[-10:],
+            "updated_at": datetime.now().isoformat()
+        }
+        
+        if current_prefs.data:
+            # Update existing
+            supabase.table("user_preference_patterns") \
+                .update(preference_data) \
+                .eq("user_id", user_id) \
+                .execute()
+        else:
+            # Insert new
+            supabase.table("user_preference_patterns") \
+                .insert(preference_data) \
+                .execute()
+                
+        return True
+        
+    except Exception as e:
+        print(f"Error updating user preferences: {e}")
+        return False
+
+@app.post("/rate-recipe")
+def rate_recipe(req: RateRecipeRequest):
+    """
+    Rate a recipe and update user preferences based on the rating
+    """
+    try:
+        # Validate rating
+        if req.rating < 1 or req.rating > 5:
+            raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+            
+        # For recipes that exist in database
+        if req.recipe_id:
+            # Validate UUID format
+            try:
+                uuid.UUID(req.recipe_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid recipe ID format")
+            
+            # Check if user already rated this recipe
+            existing_rating = supabase.table("recipe_ratings") \
+                .select("id") \
+                .eq("user_id", req.user_id) \
+                .eq("recipe_id", req.recipe_id) \
+                .limit(1) \
+                .execute()
+                
+            rating_data = {
+                "user_id": req.user_id,
+                "recipe_id": req.recipe_id,
+                "rating": req.rating,
+                "feedback_reason": req.feedback_reason,
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            if existing_rating.data:
+                # Update existing rating
+                supabase.table("recipe_ratings") \
+                    .update(rating_data) \
+                    .eq("id", existing_rating.data[0]["id"]) \
+                    .execute()
+            else:
+                # Insert new rating
+                rating_data["created_at"] = datetime.now().isoformat()
+                supabase.table("recipe_ratings") \
+                    .insert(rating_data) \
+                    .execute()
+                    
+            # Get recipe data for preference learning
+            recipe_data_result = supabase.table("recipes") \
+                .select("ingredients, cuisine") \
+                .eq("id", req.recipe_id) \
+                .single() \
+                .execute()
+                
+            if recipe_data_result.data:
+                update_user_preferences_from_rating(
+                    req.user_id, 
+                    req.rating, 
+                    req.feedback_reason or "", 
+                    recipe_data_result.data
+                )
+                
+        # For generated recipes not yet in database
+        elif req.recipe_data:
+            # Just update preferences without storing rating
+            update_user_preferences_from_rating(
+                req.user_id,
+                req.rating,
+                req.feedback_reason or "",
+                req.recipe_data
+            )
+            
+        return {
+            "success": True,
+            "message": "Rating submitted successfully",
+            "preferences_updated": True
+        }
+        
+    except Exception as e:
+        print(f"Error in rate_recipe: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to submit rating: {str(e)}")
+
+@app.get("/user-preferences/{user_id}")
+def get_user_preferences(user_id: str):
+    """
+    Get user's learned preferences for smart recipe generation
+    """
+    try:
+        preferences = supabase.table("user_preference_patterns") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .limit(1) \
+            .execute()
+            
+        if preferences.data and len(preferences.data) > 0:
+            return {
+                "preferences": preferences.data[0],
+                "has_preferences": True
+            }
+        else:
+            return {
+                "preferences": {
+                    "disliked_ingredients": [],
+                    "disliked_cuisines": [],
+                    "preferred_ingredients": [],
+                    "preferred_cuisines": []
+                },
+                "has_preferences": False
+            }
+            
+    except Exception as e:
+        print(f"Error getting user preferences: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get preferences: {str(e)}")
+
+@app.get("/recipe-ratings/{user_id}")
+def get_user_recipe_ratings(user_id: str, limit: int = 50):
+    """
+    Get user's recipe rating history
+    """
+    try:
+        ratings = supabase.table("recipe_ratings") \
+            .select("*, recipes(title, cuisine)") \
+            .eq("user_id", user_id) \
+            .order("created_at", desc=True) \
+            .limit(limit) \
+            .execute()
+            
+        return {
+            "ratings": ratings.data or [],
+            "total_ratings": len(ratings.data) if ratings.data else 0
+        }
+        
+    except Exception as e:
+        print(f"Error getting recipe ratings: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get ratings: {str(e)}")

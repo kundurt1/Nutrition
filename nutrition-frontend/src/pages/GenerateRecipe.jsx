@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import RecipeRatings from '../components/RecipeRatings'; 
 
 export default function GenerateRecipe() {
   const navigate = useNavigate();
@@ -117,7 +118,7 @@ export default function GenerateRecipe() {
         title: title.trim(),
         budget: parseFloat(budget),
         user_id: userId,
-        regenerate_single: true, // Flag to indicate single recipe generation
+        regenerate_single: true,
         exclude_recipes: recipeResults.slice(0, recipeIndex).concat(recipeResults.slice(recipeIndex + 1))
       };
       
@@ -143,7 +144,6 @@ export default function GenerateRecipe() {
       const data = await res.json();
       
       if (data && data.recipe) {
-        // Replace the recipe at the specified index
         const updatedRecipes = [...recipeResults];
         updatedRecipes[recipeIndex] = data.recipe;
         setRecipeResults(updatedRecipes);
@@ -159,6 +159,84 @@ export default function GenerateRecipe() {
     }
   };
 
+  // Helper functions for ingredient consolidation
+  const normalizeIngredientName = (name) => {
+    if (!name) return 'unknown';
+    
+    let normalized = name.toLowerCase().trim();
+    
+    const descriptorsToRemove = [
+      'diced', 'chopped', 'sliced', 'minced', 'crushed', 'grated',
+      'fresh', 'dried', 'frozen', 'canned', 'cooked', 'raw',
+      'boneless', 'skinless', 'lean', 'ground', 'whole',
+      'large', 'medium', 'small', 'extra', 'jumbo',
+      'organic', 'free-range', 'grass-fed'
+    ];
+    
+    descriptorsToRemove.forEach(descriptor => {
+      const regex = new RegExp(`\\b${descriptor}\\s+`, 'gi');
+      normalized = normalized.replace(regex, '');
+    });
+    
+    const ingredientMappings = {
+      'chicken breast': 'chicken',
+      'chicken thigh': 'chicken',
+      'chicken thighs': 'chicken',
+      'chicken leg': 'chicken',
+      'chicken drumstick': 'chicken',
+      'chicken wing': 'chicken',
+      'chicken tender': 'chicken',
+      'ground beef': 'beef',
+      'beef chuck': 'beef',
+      'beef sirloin': 'beef',
+      'steak': 'beef',
+      'beef steak': 'beef',
+      'pork chop': 'pork',
+      'pork shoulder': 'pork',
+      'pork loin': 'pork',
+      'yellow onion': 'onion',
+      'white onion': 'onion',
+      'red onion': 'onion',
+      'sweet onion': 'onion',
+      'roma tomato': 'tomato',
+      'cherry tomato': 'tomato',
+      'grape tomato': 'tomato',
+      'beefsteak tomato': 'tomato',
+      'bell pepper': 'bell pepper',
+      'red bell pepper': 'bell pepper',
+      'green bell pepper': 'bell pepper',
+      'yellow bell pepper': 'bell pepper',
+      'garlic clove': 'garlic',
+      'garlic bulb': 'garlic'
+    };
+    
+    for (const [variant, base] of Object.entries(ingredientMappings)) {
+      if (normalized.includes(variant)) {
+        normalized = base;
+        break;
+      }
+    }
+    
+    normalized = normalized.replace(/\s+/g, ' ').trim();
+    return normalized || name.toLowerCase();
+  };
+
+  const getDisplayName = (normalizedName, originalName) => {
+    const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+    
+    const commonIngredients = [
+      'chicken', 'beef', 'pork', 'fish', 'turkey', 'lamb',
+      'onion', 'tomato', 'garlic', 'carrot', 'celery',
+      'bread', 'cheese', 'milk', 'eggs'
+    ];
+    
+    if (commonIngredients.includes(normalizedName)) {
+      return capitalize(normalizedName);
+    }
+    
+    return capitalize(originalName);
+  };
+
   const generateConsolidatedGroceryList = () => {
     if (!recipeResults || recipeResults.length === 0) return [];
 
@@ -167,18 +245,25 @@ export default function GenerateRecipe() {
     recipeResults.forEach(recipe => {
       const groceryList = recipe.grocery_list || [];
       groceryList.forEach(item => {
-        const itemName = item.item || 'Unknown item';
+        const originalName = item.item || 'Unknown item';
+        const normalizedName = normalizeIngredientName(originalName);
         const quantity = item.quantity || 1;
         const cost = item.estimated_cost || 0;
 
-        if (consolidatedItems[itemName]) {
-          consolidatedItems[itemName].quantity += quantity;
-          consolidatedItems[itemName].estimated_cost += cost;
+        if (consolidatedItems[normalizedName]) {
+          consolidatedItems[normalizedName].quantity += quantity;
+          consolidatedItems[normalizedName].estimated_cost += cost;
+          
+          if (!consolidatedItems[normalizedName].originalNames.includes(originalName)) {
+            consolidatedItems[normalizedName].originalNames.push(originalName);
+          }
         } else {
-          consolidatedItems[itemName] = {
-            item: itemName,
+          consolidatedItems[normalizedName] = {
+            item: getDisplayName(normalizedName, originalName),
+            displayName: getDisplayName(normalizedName, originalName),
             quantity: quantity,
-            estimated_cost: cost
+            estimated_cost: cost,
+            originalNames: [originalName]
           };
         }
       });
@@ -186,7 +271,7 @@ export default function GenerateRecipe() {
 
     return Object.values(consolidatedItems).map(item => ({
       ...item,
-      estimated_cost: Math.round(item.estimated_cost * 100) / 100 // Round to 2 decimal places
+      estimated_cost: Math.round(item.estimated_cost * 100) / 100
     }));
   };
 
@@ -213,7 +298,7 @@ export default function GenerateRecipe() {
           item_name: item.item,
           quantity: item.quantity,
           estimated_cost: item.estimated_cost,
-          category: 'Recipe Generated', // You can categorize these items
+          category: 'Recipe Generated',
           is_purchased: false
         }))
       };
@@ -237,9 +322,6 @@ export default function GenerateRecipe() {
         throw new Error(errorMessage);
       }
 
-      const data = await res.json();
-      
-      // Show success message and offer navigation
       const shouldNavigate = window.confirm(
         `Successfully added ${groceryList.length} items to your grocery list! Would you like to view your grocery list now?`
       );
@@ -256,8 +338,12 @@ export default function GenerateRecipe() {
     }
   };
 
+  const handleRatingSubmit = (rating, feedback) => {
+    console.log(`Recipe rated ${rating} stars`, feedback);
+    // Optional: Show a brief success message or update UI
+  };
+
   const renderRecipe = (rec, idx) => {
-    // Safe access to nested properties
     const recipeName = rec.recipe_name || rec.recipe_text?.split('\n')[0] || `Recipe ${idx + 1}`;
     const ingredients = rec.ingredients || [];
     const directions = rec.directions || [];
@@ -340,6 +426,13 @@ export default function GenerateRecipe() {
         <p style={{ fontStyle: 'italic' }}>
           Estimated cost: ${typeof rec.cost_estimate === 'number' ? rec.cost_estimate.toFixed(2) : '0.00'}
         </p>
+
+        {/* ADD THE RATING COMPONENT HERE */}
+        <RecipeRating 
+          recipeData={rec}
+          userId={userId}
+          onRatingSubmit={handleRatingSubmit}
+        />
       </div>
     );
   };
@@ -351,7 +444,7 @@ export default function GenerateRecipe() {
       <div style={{ marginTop: '32px', border: '2px solid #4CAF50', padding: '16px', borderRadius: '8px', backgroundColor: '#f9f9f9' }}>
         <h3 style={{ color: '#4CAF50', marginBottom: '16px' }}>Consolidated Grocery List</h3>
         <p style={{ marginBottom: '16px', color: '#666' }}>
-          This list combines all ingredients from your selected recipes:
+          This list combines similar ingredients from your selected recipes:
         </p>
         
         {groceryList.length > 0 ? (
@@ -359,10 +452,15 @@ export default function GenerateRecipe() {
             <ul style={{ marginBottom: '16px' }}>
               {groceryList.map((item, i) => (
                 <li key={i} style={{ marginBottom: '8px' }}>
-                  <strong>{item.quantity}</strong> × {item.item} — 
+                  <strong>{item.quantity}</strong> × {item.displayName} — 
                   <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>
                     ${item.estimated_cost.toFixed(2)}
                   </span>
+                  {item.originalNames && item.originalNames.length > 1 && (
+                    <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>
+                      (combines: {item.originalNames.join(', ')})
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -419,6 +517,20 @@ export default function GenerateRecipe() {
       <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Generate 3 Recipes</h2>
         <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={() => navigate('/home')}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            🏠 Home
+          </button>
           <button
             onClick={() => navigate('/preferences')}
             style={{
@@ -536,7 +648,7 @@ export default function GenerateRecipe() {
           <div style={{ marginTop: '24px', textAlign: 'left' }}>
             <h3>Generated Recipes</h3>
             <p style={{ color: '#666', marginBottom: '16px' }}>
-              Don't like a recipe? Click "Regenerate" to get a new one!
+              Don't like a recipe? Click "Regenerate" to get a new one or rate it below!
             </p>
             {recipeResults.map((rec, idx) => renderRecipe(rec, idx))}
           </div>

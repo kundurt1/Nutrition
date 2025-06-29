@@ -10,7 +10,9 @@ export default function HomePage() {
   const [stats, setStats] = useState({
     totalRecipes: 0,
     totalGroceryItems: 0,
+    totalFavorites: 0, // Add favorites count
     recentActivity: [],
+    recentFavorites: [], // Add recent favorites
     nutritionInsights: {
       totalCaloriesToday: 0,
       totalCaloriesWeek: 0,
@@ -79,14 +81,31 @@ export default function HomePage() {
         .order('date', { ascending: false })
         .limit(30); // Get last 30 meal logs
 
+      // Fetch favorites count and recent favorites
+      let favoritesCount = 0;
+      let recentFavorites = [];
+      
+      try {
+        const favoritesResponse = await fetch(`http://localhost:8000/favorites/${userId}?limit=5`);
+        if (favoritesResponse.ok) {
+          const favoritesData = await favoritesResponse.json();
+          favoritesCount = favoritesData.total_count || 0;
+          recentFavorites = favoritesData.favorites || [];
+        }
+      } catch (favoritesError) {
+        console.log('Could not fetch favorites (this is OK if backend is not running):', favoritesError);
+      }
+
       // Calculate nutrition insights
       const nutritionInsights = calculateNutritionInsights(mealLogs || [], recipes || []);
 
       setStats({
         totalRecipes: recipes?.length || 0,
         totalGroceryItems: groceryItems?.filter(item => !item.is_purchased).length || 0,
+        totalFavorites: favoritesCount,
         recentRecipes: recipes || [],
         recentGroceryItems: groceryItems || [],
+        recentFavorites: recentFavorites,
         nutritionInsights
       });
 
@@ -253,6 +272,22 @@ export default function HomePage() {
           </p>
         </div>
 
+        {/* NEW: Favorites Stat */}
+        <div style={{
+          padding: '20px',
+          backgroundColor: '#fce4ec',
+          borderRadius: '8px',
+          textAlign: 'center',
+          border: '1px solid #e91e63'
+        }}>
+          <h3 style={{ margin: '0 0 8px 0', color: '#c2185b', fontSize: '24px' }}>
+            {stats.totalFavorites}
+          </h3>
+          <p style={{ margin: 0, color: '#c2185b', fontSize: '14px' }}>
+            Favorite Recipes
+          </p>
+        </div>
+
         <div style={{
           padding: '20px',
           backgroundColor: '#fff3e0',
@@ -384,7 +419,7 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Favorite Meals */}
+        {/* NEW: Recent Favorites Section */}
         <div style={{
           padding: '20px',
           backgroundColor: '#f9f9f9',
@@ -392,12 +427,12 @@ export default function HomePage() {
           border: '1px solid #ddd'
         }}>
           <h3 style={{ margin: '0 0 16px 0', color: '#333', fontSize: '18px' }}>
-            ❤️ Favorite Meals
+            ❤️ Recent Favorites
           </h3>
-          {stats.nutritionInsights.favoriteMeals.length > 0 ? (
+          {stats.recentFavorites.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {stats.nutritionInsights.favoriteMeals.map((item, index) => (
-                <div key={index} style={{
+              {stats.recentFavorites.slice(0, 3).map((favorite, index) => (
+                <div key={favorite.id} style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -406,24 +441,41 @@ export default function HomePage() {
                   borderRadius: '6px',
                   border: '1px solid #eee'
                 }}>
-                  <span style={{ fontWeight: 'bold', color: '#333', fontSize: '14px' }}>
-                    {item.title.length > 25 ? item.title.substring(0, 25) + '...' : item.title}
-                  </span>
+                  <div>
+                    <span style={{ fontWeight: 'bold', color: '#333', fontSize: '14px' }}>
+                      {favorite.recipe_name && favorite.recipe_name.length > 20 
+                        ? favorite.recipe_name.substring(0, 20) + '...' 
+                        : favorite.recipe_name || 'Favorite Recipe'}
+                    </span>
+                    <div style={{ fontSize: '12px', color: '#888' }}>
+                      {new Date(favorite.favorited_at).toLocaleDateString()}
+                    </div>
+                  </div>
                   <span style={{
                     backgroundColor: '#e91e63',
                     color: 'white',
-                    padding: '2px 8px',
+                    padding: '2px 6px',
                     borderRadius: '12px',
                     fontSize: '12px'
                   }}>
-                    {item.count}x
+                    ❤️
                   </span>
                 </div>
               ))}
+              {stats.totalFavorites > 3 && (
+                <div style={{ 
+                  textAlign: 'center', 
+                  marginTop: '8px',
+                  fontSize: '12px',
+                  color: '#666'
+                }}>
+                  +{stats.totalFavorites - 3} more favorites
+                </div>
+              )}
             </div>
           ) : (
             <p style={{ color: '#666', fontSize: '14px', textAlign: 'center', margin: 0 }}>
-              Start logging meals to see your favorites!
+              Start favoriting recipes to see them here!
             </p>
           )}
         </div>
@@ -469,6 +521,43 @@ export default function HomePage() {
           {stats.recentRecipes && stats.recentRecipes.length > 0 && (
             <div style={{ marginTop: '12px', fontSize: '12px', color: '#888' }}>
               Last created: {new Date(stats.recentRecipes[0].created_at).toLocaleDateString()}
+            </div>
+          )}
+        </div>
+
+        {/* NEW: Favorites Card */}
+        <div 
+          onClick={() => navigate('/favorites')}
+          style={{
+            padding: '24px',
+            border: '2px solid #e91e63',
+            borderRadius: '12px',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            backgroundColor: '#fff',
+            textAlign: 'center'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#fce4ec';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(233, 30, 99, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#fff';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>❤️</div>
+          <h3 style={{ margin: '0 0 12px 0', color: '#c2185b', fontSize: '20px' }}>
+            My Favorites
+          </h3>
+          <p style={{ margin: 0, color: '#666', fontSize: '14px', lineHeight: '1.4' }}>
+            Access your favorite recipes and create custom collections
+          </p>
+          {stats.totalFavorites > 0 && (
+            <div style={{ marginTop: '12px', fontSize: '12px', color: '#888' }}>
+              {stats.totalFavorites} favorite recipes saved
             </div>
           )}
         </div>
@@ -634,6 +723,22 @@ export default function HomePage() {
           }}
         >
           Start Cooking 🍳
+        </button>
+        
+        <button
+          onClick={() => navigate('/favorites')}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: '#e91e63',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: 'bold'
+          }}
+        >
+          View Favorites ❤️
         </button>
         
         <button
