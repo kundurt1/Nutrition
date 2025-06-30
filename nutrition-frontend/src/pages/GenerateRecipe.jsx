@@ -428,7 +428,7 @@ export default function GenerateRecipe() {
         </p>
 
         {/* ADD THE RATING COMPONENT HERE */}
-        <RecipeRating 
+        <RecipeRatings 
           recipeData={rec}
           userId={userId}
           onRatingSubmit={handleRatingSubmit}
