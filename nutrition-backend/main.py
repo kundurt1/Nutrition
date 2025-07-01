@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from routers import recipes, grocery, ratings, nutrition, favorites
-from config import settings
 
 # Load environment variables
 load_dotenv()
@@ -21,35 +20,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(recipes.router, prefix="/api", tags=["recipes"])
-app.include_router(grocery.router, prefix="/api", tags=["grocery"])
-app.include_router(ratings.router, prefix="/api", tags=["ratings"])
-app.include_router(nutrition.router, prefix="/api", tags=["nutrition"])
-app.include_router(favorites.router, prefix="/api", tags=["favorites"])
+# Include routers (keeping your existing URLs - no /api prefix)
+app.include_router(recipes.router, tags=["recipes"])
+app.include_router(grocery.router, tags=["grocery"])
+app.include_router(ratings.router, tags=["ratings"])
+app.include_router(nutrition.router, tags=["nutrition"])
+app.include_router(favorites.router, tags=["favorites"])
 
 @app.get("/")
 def root():
     return {"api_key_loaded": bool(os.getenv("OPENAI_API_KEY"))}
 
-# ================================
-# config.py - Configuration
-# ================================
-import os
-from pydantic_settings import BaseSettings
-
-class Settings(BaseSettings):
-    # OpenAI
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
-    
-    # Supabase
-    supabase_url: str = os.getenv("SUPABASE_URL", "")
-    supabase_service_key: str = os.getenv("SUPABASE_SERVICE_KEY", "")
-    
-    # App settings
-    debug: bool = False
-    
-    class Config:
-        env_file = ".env"
-
-settings = Settings()
+@app.get("/test")
+def test():
+    return {"message": "All routers working with your naming convention!"}
