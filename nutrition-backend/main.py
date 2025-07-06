@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from routers import recipes, grocery, ratings, nutrition, favorites
+from routers import recipes, grocery, ratings, nutrition, favorites,mealPlanning
 
 # Load environment variables
 load_dotenv()
@@ -31,6 +31,7 @@ app.include_router(grocery.router, tags=["grocery"])
 app.include_router(ratings.router, tags=["ratings"])
 app.include_router(nutrition.router, tags=["nutrition"])
 app.include_router(favorites.router, tags=["favorites"])
+app.include_router(mealPlanning.router, tags=["meal-planning"])
 
 @app.get("/")
 def root():
