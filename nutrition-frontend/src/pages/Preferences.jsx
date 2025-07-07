@@ -1,6 +1,9 @@
+// src/pages/Preferences.jsx
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-export default function AdvancedPreferences() {
+export default function Preferences() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   
@@ -124,6 +127,9 @@ export default function AdvancedPreferences() {
     console.log('Saving advanced preferences:', preferenceData);
     alert('Advanced preferences saved successfully!');
     setSaving(false);
+    
+    // Navigate to home after saving
+    navigate('/home');
   };
 
   const getActiveRestrictions = () => {
@@ -132,418 +138,342 @@ export default function AdvancedPreferences() {
       .map(([key, _]) => key);
   };
 
-  const getPreferencesSummary = () => {
-    const activeRestrictions = getActiveRestrictions();
-    return {
-      restrictions: activeRestrictions.length,
-      preferred_cuisines: cuisinePreferences.preferred.length,
-      macro_tracking: macroTargets.enableTargets,
-      max_cook_time: cookingConstraints.maxCookTime || 'No limit'
-    };
-  };
-
   if (loading) {
     return (
-      <div style={{ padding: '20px', textAlign: 'center' }}>
-        <p>Loading preferences...</p>
+      <div className="app-container">
+        <div className="card">
+          <p className="text-center">Loading preferences...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Header */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: '32px',
-        paddingBottom: '16px',
-        borderBottom: '2px solid #f0f0f0'
-      }}>
-        <div>
-          <h1 style={{ margin: '0 0 8px 0', color: '#333' }}>⚙️ Advanced Preferences</h1>
-          <p style={{ margin: 0, color: '#666', fontSize: '16px' }}>
-            Customize your dietary restrictions, macro targets, and cooking preferences
-          </p>
-        </div>
-        <div style={{ 
-          padding: '12px 16px', 
-          backgroundColor: '#e3f2fd', 
-          borderRadius: '8px',
-          fontSize: '14px',
-          color: '#1976d2'
-        }}>
-          <div><strong>{getPreferencesSummary().restrictions}</strong> active restrictions</div>
-          <div><strong>{getPreferencesSummary().preferred_cuisines}</strong> preferred cuisines</div>
-        </div>
-      </div>
-
-      {/* Basic Preferences Section */}
-      <div style={{ marginBottom: '32px', padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-        <h2 style={{ margin: '0 0 16px 0', color: '#333', fontSize: '20px' }}>💰 Basic Preferences</h2>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+    <div className="app-container">
+      <div className="card-large">
+        {/* Header */}
+        <div className="nav-header">
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-              Budget Range (per recipe)
-            </label>
-            <input
-              type="text"
-              value={budget}
-              onChange={(e) => setBudget(e.target.value)}
-              placeholder="e.g. $15-25"
-              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
-            />
+            <h1>⚙️ Set your preferences</h1>
+            <p className="subtitle">Customize your dietary restrictions, macro targets, and cooking preferences</p>
           </div>
           
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-              Primary Diet Type
-            </label>
-            <select
-              value={diet}
-              onChange={(e) => setDiet(e.target.value)}
-              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+          <div className="nav-buttons">
+            <button 
+              onClick={() => navigate('/home')}
+              className="btn-secondary btn-sm"
             >
-              <option value="">Select...</option>
-              <option value="balanced">Balanced</option>
-              <option value="low-carb">Low Carb</option>
-              <option value="high-protein">High Protein</option>
-              <option value="mediterranean">Mediterranean</option>
-              <option value="plant-based">Plant Based</option>
-            </select>
+              🏠 Home
+            </button>
           </div>
         </div>
-        
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            Allergies & Foods to Avoid
-          </label>
-          <input
-            type="text"
-            value={allergies}
-            onChange={(e) => setAllergies(e.target.value)}
-            placeholder="e.g. Shellfish, Eggs, Soy, Peanuts"
-            style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
-          />
-        </div>
-      </div>
 
-      {/* Dietary Restrictions Section */}
-      <div style={{ marginBottom: '32px', padding: '20px', backgroundColor: '#f0f8ff', borderRadius: '8px' }}>
-        <h2 style={{ margin: '0 0 16px 0', color: '#333', fontSize: '20px' }}>🥗 Dietary Restrictions</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          {Object.entries({
-            glutenFree: 'Gluten-Free',
-            dairyFree: 'Dairy-Free', 
-            nutFree: 'Nut-Free',
-            lowSodium: 'Low Sodium',
-            lowSugar: 'Low Sugar',
-            lowFat: 'Low Fat',
-            highProtein: 'High Protein',
-            vegetarian: 'Vegetarian',
-            vegan: 'Vegan',
-            keto: 'Keto',
-            paleo: 'Paleo',
-            wholeFoods: 'Whole Foods Only'
-          }).map(([key, label]) => (
-            <label key={key} style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              padding: '8px', 
-              backgroundColor: dietaryRestrictions[key] ? '#e3f2fd' : '#fff',
-              borderRadius: '4px',
-              border: '1px solid #ddd',
-              cursor: 'pointer'
-            }}>
+        {/* Basic Preferences Section */}
+        <div className="recipe-card mb-4">
+          <h3 className="mb-3">💰 Basic Preferences</h3>
+          
+          <div className="flex gap-3 mb-3" style={{ flexDirection: 'column' }}>
+            <div className="form-group">
+              <label>What is your budget range</label>
               <input
-                type="checkbox"
-                checked={dietaryRestrictions[key]}
-                onChange={() => handleDietaryRestrictionChange(key)}
-                style={{ marginRight: '8px' }}
+                type="text"
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                placeholder="50-100"
               />
-              {label}
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {/* Macro Targets Section */}
-      <div style={{ marginBottom: '32px', padding: '20px', backgroundColor: '#f0fff0', borderRadius: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ margin: '0 16px 0 0', color: '#333', fontSize: '20px' }}>🎯 Macro Targets</h2>
-          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={macroTargets.enableTargets}
-              onChange={(e) => setMacroTargets(prev => ({ ...prev, enableTargets: e.target.checked }))}
-              style={{ marginRight: '8px' }}
-            />
-            Enable macro tracking
-          </label>
-        </div>
-        
-        {macroTargets.enableTargets && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
-            {[
-              { key: 'calories', label: 'Calories', placeholder: 'e.g. 2000' },
-              { key: 'protein', label: 'Protein (g)', placeholder: 'e.g. 150' },
-              { key: 'carbs', label: 'Carbs (g)', placeholder: 'e.g. 200' },
-              { key: 'fat', label: 'Fat (g)', placeholder: 'e.g. 70' },
-              { key: 'fiber', label: 'Fiber (g)', placeholder: 'e.g. 25' }
-            ].map(({ key, label, placeholder }) => (
-              <div key={key}>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold', fontSize: '14px' }}>
-                  {label}
-                </label>
-                <input
-                  type="number"
-                  value={macroTargets[key]}
-                  onChange={(e) => setMacroTargets(prev => ({ ...prev, [key]: e.target.value }))}
-                  placeholder={placeholder}
-                  style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Cuisine Preferences Section */}
-      <div style={{ marginBottom: '32px', padding: '20px', backgroundColor: '#fff8f0', borderRadius: '8px' }}>
-        <h2 style={{ margin: '0 0 16px 0', color: '#333', fontSize: '20px' }}>🌍 Cuisine Preferences</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-          {availableCuisines.map(cuisine => {
-            const isPreferred = cuisinePreferences.preferred.includes(cuisine);
-            const isDisliked = cuisinePreferences.disliked.includes(cuisine);
+            </div>
             
-            return (
-              <div key={cuisine} style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center',
-                padding: '8px',
-                backgroundColor: isPreferred ? '#e8f5e8' : isDisliked ? '#ffebee' : '#fff',
-                borderRadius: '4px',
-                border: '1px solid #ddd'
-              }}>
-                <span style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>{cuisine}</span>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  <button
-                    onClick={() => handleCuisinePreference(cuisine, 'preferred')}
-                    style={{
-                      padding: '2px 6px',
-                      backgroundColor: isPreferred ? '#4CAF50' : '#f0f0f0',
-                      color: isPreferred ? 'white' : '#333',
-                      border: 'none',
-                      borderRadius: '3px',
-                      cursor: 'pointer',
-                      fontSize: '10px'
-                    }}
-                  >
-                    👍
-                  </button>
-                  <button
-                    onClick={() => handleCuisinePreference(cuisine, 'disliked')}
-                    style={{
-                      padding: '2px 6px',
-                      backgroundColor: isDisliked ? '#f44336' : '#f0f0f0',
-                      color: isDisliked ? 'white' : '#333',
-                      border: 'none',
-                      borderRadius: '3px',
-                      cursor: 'pointer',
-                      fontSize: '10px'
-                    }}
-                  >
-                    👎
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+            <div className="form-group">
+              <label>Enter any allergies or foods you want to avoid</label>
+              <input
+                type="text"
+                value={allergies}
+                onChange={(e) => setAllergies(e.target.value)}
+                placeholder="Shellfish, Eggs, Soy"
+              />
+            </div>
 
-      {/* Cooking Constraints Section */}
-      <div style={{ marginBottom: '32px', padding: '20px', backgroundColor: '#f5f5f5', borderRadius: '8px' }}>
-        <h2 style={{ margin: '0 0 16px 0', color: '#333', fontSize: '20px' }}>⏱️ Cooking Constraints</h2>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
-              Max Cooking Time (minutes)
-            </label>
-            <input
-              type="number"
-              value={cookingConstraints.maxCookTime}
-              onChange={(e) => setCookingConstraints(prev => ({ ...prev, maxCookTime: e.target.value }))}
-              placeholder="e.g. 45"
-              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
-            />
-          </div>
-          
-          <div>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
-              Max Prep Time (minutes)
-            </label>
-            <input
-              type="number"
-              value={cookingConstraints.maxPrepTime}
-              onChange={(e) => setCookingConstraints(prev => ({ ...prev, maxPrepTime: e.target.value }))}
-              placeholder="e.g. 15"
-              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
-            />
-          </div>
-          
-          <div>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
-              Max Ingredients
-            </label>
-            <input
-              type="number"
-              value={cookingConstraints.maxIngredients}
-              onChange={(e) => setCookingConstraints(prev => ({ ...prev, maxIngredients: e.target.value }))}
-              placeholder="e.g. 10"
-              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
-            />
-          </div>
-          
-          <div>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
-              Difficulty Level
-            </label>
-            <select
-              value={cookingConstraints.difficultyLevel}
-              onChange={(e) => setCookingConstraints(prev => ({ ...prev, difficultyLevel: e.target.value }))}
-              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
-            >
-              <option value="">Any difficulty</option>
-              {difficultyLevels.map(level => (
-                <option key={level.value} value={level.value}>{level.label}</option>
-              ))}
-            </select>
+            <div className="form-group">
+              <label>Is there a particular diet you want to follow</label>
+              <select
+                value={diet}
+                onChange={(e) => setDiet(e.target.value)}
+              >
+                <option value="">Select...</option>
+                <option value="balanced">Balanced</option>
+                <option value="low-carb">Low Carb</option>
+                <option value="high-protein">High Protein</option>
+                <option value="mediterranean">Mediterranean</option>
+                <option value="plant-based">Plant Based</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            Available Kitchen Equipment
-          </label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
-            {kitchenEquipmentOptions.map(equipment => (
-              <label key={equipment} style={{ 
+        {/* Dietary Restrictions Section */}
+        <div className="recipe-card mb-4">
+          <h3 className="mb-3">🥗 Dietary Restrictions</h3>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+            gap: '12px' 
+          }}>
+            {Object.entries({
+              glutenFree: 'Gluten-Free',
+              dairyFree: 'Dairy-Free', 
+              nutFree: 'Nut-Free',
+              lowSodium: 'Low Sodium',
+              lowSugar: 'Low Sugar',
+              lowFat: 'Low Fat',
+              highProtein: 'High Protein',
+              vegetarian: 'Vegetarian',
+              vegan: 'Vegan',
+              keto: 'Keto',
+              paleo: 'Paleo',
+              wholeFoods: 'Whole Foods Only'
+            }).map(([key, label]) => (
+              <label key={key} style={{ 
                 display: 'flex', 
                 alignItems: 'center', 
-                padding: '6px', 
-                backgroundColor: cookingConstraints.kitchenEquipment.includes(equipment) ? '#e3f2fd' : '#fff',
-                borderRadius: '4px',
-                border: '1px solid #ddd',
-                cursor: 'pointer'
+                padding: '12px', 
+                backgroundColor: dietaryRestrictions[key] ? '#e3f2fd' : '#f8f9fa',
+                borderRadius: '8px',
+                border: `2px solid ${dietaryRestrictions[key] ? '#007bff' : '#e9ecef'}`,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
               }}>
                 <input
                   type="checkbox"
-                  checked={cookingConstraints.kitchenEquipment.includes(equipment)}
-                  onChange={() => handleEquipmentChange(equipment)}
-                  style={{ marginRight: '6px' }}
+                  checked={dietaryRestrictions[key]}
+                  onChange={() => handleDietaryRestrictionChange(key)}
+                  style={{ marginRight: '8px' }}
                 />
-                {equipment}
+                <span style={{ fontWeight: '500' }}>{label}</span>
               </label>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Preferences Summary */}
-      <div style={{ marginBottom: '32px', padding: '20px', backgroundColor: '#f0f4ff', borderRadius: '8px', border: '2px solid #2196F3' }}>
-        <h3 style={{ margin: '0 0 12px 0', color: '#1976d2' }}>📋 Your Preferences Summary</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', fontSize: '14px' }}>
-          <div>
-            <strong>Budget:</strong> ${budget} per recipe
+        {/* Macro Targets Section */}
+        <div className="recipe-card mb-4">
+          <div className="flex align-center mb-3">
+            <h3 style={{ margin: '0 16px 0 0' }}>🎯 Macro Targets</h3>
+            <label style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              cursor: 'pointer',
+              margin: 0 
+            }}>
+              <input
+                type="checkbox"
+                checked={macroTargets.enableTargets}
+                onChange={(e) => setMacroTargets(prev => ({ ...prev, enableTargets: e.target.checked }))}
+                style={{ marginRight: '8px' }}
+              />
+              <span>Enable macro tracking</span>
+            </label>
           </div>
-          <div>
-            <strong>Active Restrictions:</strong> {getActiveRestrictions().length > 0 ? getActiveRestrictions().join(', ') : 'None'}
-          </div>
-          <div>
-            <strong>Preferred Cuisines:</strong> {cuisinePreferences.preferred.length > 0 ? cuisinePreferences.preferred.join(', ') : 'None'}
-          </div>
-          <div>
-            <strong>Max Cook Time:</strong> {cookingConstraints.maxCookTime || 'No limit'} minutes
-          </div>
+          
           {macroTargets.enableTargets && (
-            <div>
-              <strong>Daily Calories:</strong> {macroTargets.calories} kcal
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+              gap: '16px' 
+            }}>
+              {[
+                { key: 'calories', label: 'Calories', placeholder: 'e.g. 2000' },
+                { key: 'protein', label: 'Protein (g)', placeholder: 'e.g. 150' },
+                { key: 'carbs', label: 'Carbs (g)', placeholder: 'e.g. 200' },
+                { key: 'fat', label: 'Fat (g)', placeholder: 'e.g. 70' },
+                { key: 'fiber', label: 'Fiber (g)', placeholder: 'e.g. 25' }
+              ].map(({ key, label, placeholder }) => (
+                <div key={key} className="form-group">
+                  <label style={{ fontSize: '0.9rem' }}>{label}</label>
+                  <input
+                    type="number"
+                    value={macroTargets[key]}
+                    onChange={(e) => setMacroTargets(prev => ({ ...prev, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                  />
+                </div>
+              ))}
             </div>
           )}
-          <div>
-            <strong>Kitchen Equipment:</strong> {cookingConstraints.kitchenEquipment.length} items selected
+        </div>
+
+        {/* Cuisine Preferences Section */}
+        <div className="recipe-card mb-4">
+          <h3 className="mb-3">🌍 Cuisine Preferences</h3>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', 
+            gap: '8px' 
+          }}>
+            {availableCuisines.map(cuisine => {
+              const isPreferred = cuisinePreferences.preferred.includes(cuisine);
+              const isDisliked = cuisinePreferences.disliked.includes(cuisine);
+              
+              return (
+                <div key={cuisine} style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center',
+                  padding: '12px',
+                  backgroundColor: isPreferred ? '#e8f5e8' : isDisliked ? '#ffebee' : '#f8f9fa',
+                  borderRadius: '8px',
+                  border: `2px solid ${isPreferred ? '#28a745' : isDisliked ? '#dc3545' : '#e9ecef'}`
+                }}>
+                  <span style={{ 
+                    fontSize: '0.875rem', 
+                    fontWeight: '600', 
+                    marginBottom: '8px',
+                    textAlign: 'center'
+                  }}>
+                    {cuisine}
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleCuisinePreference(cuisine, 'preferred')}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: isPreferred ? '#28a745' : '#e9ecef',
+                        color: isPreferred ? 'white' : '#495057',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        minHeight: 'auto'
+                      }}
+                    >
+                      👍
+                    </button>
+                    <button
+                      onClick={() => handleCuisinePreference(cuisine, 'disliked')}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: isDisliked ? '#dc3545' : '#e9ecef',
+                        color: isDisliked ? 'white' : '#495057',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        minHeight: 'auto'
+                      }}
+                    >
+                      👎
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
 
-      {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: saving ? '#ccc' : '#4CAF50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: saving ? 'not-allowed' : 'pointer',
-            fontSize: '16px',
-            fontWeight: 'bold'
-          }}
-        >
-          {saving ? 'Saving...' : 'Save Advanced Preferences'}
-        </button>
-        
-        <button
-          onClick={() => {
-            // Reset to defaults
-            setDietaryRestrictions({
-              glutenFree: false, dairyFree: false, nutFree: false, lowSodium: false,
-              lowSugar: false, lowFat: false, highProtein: false, vegetarian: false,
-              vegan: false, keto: false, paleo: false, wholeFoods: false
-            });
-            setMacroTargets({
-              calories: '', protein: '', carbs: '', fat: '', fiber: '', enableTargets: false
-            });
-            setCuisinePreferences({ preferred: [], disliked: [] });
-            setCookingConstraints({
-              maxCookTime: '', maxPrepTime: '', maxIngredients: '',
-              difficultyLevel: '', kitchenEquipment: []
-            });
-          }}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: '#FF9800',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '16px'
-          }}
-        >
-          Reset to Defaults
-        </button>
-        
-        <button
-          onClick={() => alert('Navigating back to home...')}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: '#9E9E9E',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '16px'
-          }}
-        >
-          Cancel
-        </button>
+        {/* Cooking Constraints Section */}
+        <div className="recipe-card mb-4">
+          <h3 className="mb-3">⏱️ Cooking Constraints</h3>
+          
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+            gap: '16px', 
+            marginBottom: '20px' 
+          }}>
+            <div className="form-group">
+              <label>Max Cooking Time (minutes)</label>
+              <input
+                type="number"
+                value={cookingConstraints.maxCookTime}
+                onChange={(e) => setCookingConstraints(prev => ({ ...prev, maxCookTime: e.target.value }))}
+                placeholder="e.g. 45"
+              />
+            </div>
+            
+            <div className="form-group">
+              <label>Max Prep Time (minutes)</label>
+              <input
+                type="number"
+                value={cookingConstraints.maxPrepTime}
+                onChange={(e) => setCookingConstraints(prev => ({ ...prev, maxPrepTime: e.target.value }))}
+                placeholder="e.g. 15"
+              />
+            </div>
+            
+            <div className="form-group">
+              <label>Max Ingredients</label>
+              <input
+                type="number"
+                value={cookingConstraints.maxIngredients}
+                onChange={(e) => setCookingConstraints(prev => ({ ...prev, maxIngredients: e.target.value }))}
+                placeholder="e.g. 10"
+              />
+            </div>
+            
+            <div className="form-group">
+              <label>Difficulty Level</label>
+              <select
+                value={cookingConstraints.difficultyLevel}
+                onChange={(e) => setCookingConstraints(prev => ({ ...prev, difficultyLevel: e.target.value }))}
+              >
+                <option value="">Any difficulty</option>
+                {difficultyLevels.map(level => (
+                  <option key={level.value} value={level.value}>{level.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>Available Kitchen Equipment</label>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+              gap: '8px',
+              marginTop: '8px'
+            }}>
+              {kitchenEquipmentOptions.map(equipment => (
+                <label key={equipment} style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  padding: '8px', 
+                  backgroundColor: cookingConstraints.kitchenEquipment.includes(equipment) ? '#e3f2fd' : '#f8f9fa',
+                  borderRadius: '6px',
+                  border: `2px solid ${cookingConstraints.kitchenEquipment.includes(equipment) ? '#007bff' : '#e9ecef'}`,
+                  cursor: 'pointer',
+                  fontSize: '0.875rem'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={cookingConstraints.kitchenEquipment.includes(equipment)}
+                    onChange={() => handleEquipmentChange(equipment)}
+                    style={{ marginRight: '8px' }}
+                  />
+                  {equipment}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-2 justify-center">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="btn-primary"
+            style={{ width: 'auto', minWidth: '200px' }}
+          >
+            {saving ? 'Saving...' : 'Save Preferences'}
+          </button>
+          
+          <button
+            onClick={() => navigate('/home')}
+            className="btn-secondary"
+            style={{ width: 'auto', minWidth: '120px' }}
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   );

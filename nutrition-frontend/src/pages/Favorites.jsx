@@ -130,35 +130,25 @@ export default function Favorites() {
     const macros = recipeData.macros || {};
     
     return (
-      <div key={favorite.id} style={{
-        border: '1px solid #ddd',
-        borderRadius: '8px',
-        padding: '16px',
-        marginBottom: '16px',
-        backgroundColor: '#fff'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+      <div key={favorite.id} className="recipe-card">
+        <div className="recipe-header">
           <div>
-            <h3 style={{ margin: '0 0 8px 0', color: '#333' }}>
+            <h3 className="recipe-title">
               {favorite.recipe_name || 'Favorite Recipe'}
             </h3>
-            <div style={{ fontSize: '12px', color: '#888' }}>
+            <div style={{ 
+              fontSize: '0.875rem', 
+              color: '#6c757d',
+              marginTop: '4px'
+            }}>
               Favorited {new Date(favorite.favorited_at).toLocaleDateString()}
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="recipe-actions">
             <button
               onClick={() => removeFavorite(favorite.id)}
-              style={{
-                padding: '4px 8px',
-                backgroundColor: '#f44336',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px'
-              }}
+              className="btn-danger btn-sm"
             >
               Remove
             </button>
@@ -167,38 +157,84 @@ export default function Favorites() {
 
         {/* Recipe Details */}
         {ingredients.length > 0 && (
-          <div style={{ marginBottom: '12px' }}>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#555' }}>Ingredients:</h4>
-            <div style={{ fontSize: '12px', color: '#666' }}>
-              {ingredients.slice(0, 3).map(ing => ing.name).join(', ')}
-              {ingredients.length > 3 && ` +${ingredients.length - 3} more`}
+          <div className="recipe-section">
+            <h4>Key Ingredients</h4>
+            <div style={{ fontSize: '0.875rem', color: '#495057' }}>
+              {ingredients.slice(0, 5).map(ing => ing.name).join(', ')}
+              {ingredients.length > 5 && ` +${ingredients.length - 5} more`}
             </div>
           </div>
         )}
 
-        {/* Macros */}
+        {/* Nutrition Info */}
         {(macros.calories || macros.protein) && (
-          <div style={{ marginBottom: '12px' }}>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#555' }}>Nutrition:</h4>
-            <div style={{ fontSize: '12px', color: '#666', display: 'flex', gap: '12px' }}>
-              {macros.calories && <span>Calories: {macros.calories}</span>}
-              {macros.protein && <span>Protein: {macros.protein}</span>}
-              {macros.carbs && <span>Carbs: {macros.carbs}</span>}
+          <div className="recipe-section">
+            <h4>Nutrition</h4>
+            <div className="nutrition-grid">
+              {macros.calories && (
+                <div className="nutrition-item">
+                  <span className="nutrition-value">{macros.calories}</span>
+                  <span className="nutrition-label">Calories</span>
+                </div>
+              )}
+              {macros.protein && (
+                <div className="nutrition-item">
+                  <span className="nutrition-value">{macros.protein}</span>
+                  <span className="nutrition-label">Protein</span>
+                </div>
+              )}
+              {macros.carbs && (
+                <div className="nutrition-item">
+                  <span className="nutrition-value">{macros.carbs}</span>
+                  <span className="nutrition-label">Carbs</span>
+                </div>
+              )}
+              {macros.fat && (
+                <div className="nutrition-item">
+                  <span className="nutrition-value">{macros.fat}</span>
+                  <span className="nutrition-label">Fat</span>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Cuisine and Cost */}
-        <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: '#666' }}>
-          {recipeData.cuisine && <span><strong>Cuisine:</strong> {recipeData.cuisine}</span>}
-          {recipeData.cost_estimate && <span><strong>Est. Cost:</strong> ${recipeData.cost_estimate}</span>}
+        {/* Recipe Meta */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '16px', 
+          fontSize: '0.875rem', 
+          color: '#6c757d',
+          marginTop: '16px',
+          paddingTop: '16px',
+          borderTop: '1px solid #e9ecef'
+        }}>
+          {recipeData.cuisine && (
+            <span><strong>Cuisine:</strong> {recipeData.cuisine}</span>
+          )}
+          {recipeData.cost_estimate && (
+            <span><strong>Cost:</strong> ${recipeData.cost_estimate}</span>
+          )}
         </div>
 
         {/* Notes */}
         {favorite.notes && (
-          <div style={{ marginTop: '12px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
-            <strong style={{ fontSize: '12px' }}>Notes:</strong>
-            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#666' }}>{favorite.notes}</p>
+          <div style={{ 
+            marginTop: '16px', 
+            padding: '12px', 
+            backgroundColor: '#f8f9fa', 
+            borderRadius: '8px',
+            border: '1px solid #e9ecef'
+          }}>
+            <strong style={{ fontSize: '0.875rem', color: '#495057' }}>Notes:</strong>
+            <p style={{ 
+              margin: '4px 0 0 0', 
+              fontSize: '0.875rem', 
+              color: '#6c757d',
+              lineHeight: '1.4'
+            }}>
+              {favorite.notes}
+            </p>
           </div>
         )}
       </div>
@@ -207,237 +243,188 @@ export default function Favorites() {
 
   if (loading && !userId) {
     return (
-      <div className="card">
-        <p>Loading...</p>
+      <div className="app-container">
+        <div className="card">
+          <p className="text-center">Loading...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="card">
-      {/* Header */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: '24px',
-        paddingBottom: '16px',
-        borderBottom: '2px solid #f0f0f0'
-      }}>
-        <div>
-          <h1 style={{ margin: '0 0 8px 0', color: '#333' }}>❤️ My Favorites</h1>
-          <p style={{ margin: 0, color: '#666', fontSize: '16px' }}>
-            Your saved favorite recipes
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button
-            onClick={() => navigate('/home')}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#2196F3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-          >
-            🏠 Home
-          </button>
-          <button
-            onClick={() => navigate('/generate')}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-          >
-            Generate Recipes
-          </button>
-        </div>
-      </div>
-
-      {/* Error Message */}
-      {errorMsg && (
-        <div style={{ 
-          color: 'red', 
-          marginBottom: '16px', 
-          padding: '8px', 
-          backgroundColor: '#ffebee', 
-          borderRadius: '4px',
-          border: '1px solid #ffcdd2'
-        }}>
-          {errorMsg}
-        </div>
-      )}
-
-      {/* Collections Filter */}
-      {collections.length > 0 && (
-        <div style={{ marginBottom: '24px' }}>
-          <h3 style={{ margin: '0 0 12px 0', fontSize: '18px' }}>Filter by Collection</h3>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => setSelectedCollection(null)}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: selectedCollection === null ? '#e91e63' : '#f5f5f5',
-                color: selectedCollection === null ? 'white' : '#333',
-                border: '1px solid #ddd',
-                borderRadius: '20px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              All Favorites ({favorites.length})
-            </button>
-            {collections.map(collection => (
-              <button
-                key={collection.id}
-                onClick={() => setSelectedCollection(collection.id)}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: selectedCollection === collection.id ? '#e91e63' : '#f5f5f5',
-                  color: selectedCollection === collection.id ? 'white' : '#333',
-                  border: '1px solid #ddd',
-                  borderRadius: '20px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                {collection.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Create Collection Button */}
-      <div style={{ marginBottom: '24px' }}>
-        <button
-          onClick={() => setShowCreateCollection(!showCreateCollection)}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#ff9800',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px'
-          }}
-        >
-          {showCreateCollection ? 'Cancel' : 'Create New Collection'}
-        </button>
-      </div>
-
-      {/* Create Collection Form */}
-      {showCreateCollection && (
-        <div style={{ 
-          marginBottom: '24px', 
-          padding: '16px', 
-          backgroundColor: '#f9f9f9', 
-          borderRadius: '8px',
-          border: '1px solid #ddd'
-        }}>
-          <h3 style={{ margin: '0 0 12px 0' }}>Create New Collection</h3>
-          <div style={{ marginBottom: '12px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 'bold' }}>
-              Collection Name
-            </label>
-            <input
-              type="text"
-              value={newCollectionName}
-              onChange={(e) => setNewCollectionName(e.target.value)}
-              placeholder="e.g., Quick Dinners, Healthy Snacks"
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '14px'
-              }}
-            />
-          </div>
-          <div style={{ marginBottom: '12px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 'bold' }}>
-              Description (Optional)
-            </label>
-            <textarea
-              value={newCollectionDescription}
-              onChange={(e) => setNewCollectionDescription(e.target.value)}
-              placeholder="Describe this collection..."
-              rows={3}
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '14px',
-                resize: 'vertical'
-              }}
-            />
-          </div>
-          <button
-            onClick={createCollection}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-          >
-            Create Collection
-          </button>
-        </div>
-      )}
-
-      {/* Favorites List */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '32px', color: '#666' }}>
-          Loading favorites...
-        </div>
-      ) : favorites.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '32px' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>💔</div>
-          <h3 style={{ color: '#666', marginBottom: '16px' }}>No favorites yet</h3>
-          <p style={{ color: '#888', marginBottom: '24px' }}>
-            Start favoriting recipes to see them here!
-          </p>
-          <button
-            onClick={() => navigate('/generate')}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: '#2196F3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: 'bold'
-            }}
-          >
-            Generate Some Recipes
-          </button>
-        </div>
-      ) : (
-        <div>
-          <div style={{ marginBottom: '16px', color: '#666', fontSize: '14px' }}>
-            Showing {favorites.length} favorite{favorites.length !== 1 ? 's' : ''}
-            {selectedCollection && collections.find(c => c.id === selectedCollection) && 
-              ` in "${collections.find(c => c.id === selectedCollection).name}"`
-            }
+    <div className="app-container">
+      <div className="card-full">
+        {/* Header */}
+        <div className="nav-header">
+          <div>
+            <h1 style={{ textAlign: 'left' }}>❤️ My Favorites</h1>
+            <p className="subtitle" style={{ textAlign: 'left', marginBottom: 0 }}>
+              Your saved favorite recipes and collections
+            </p>
           </div>
           
-          {favorites.map(favorite => renderFavoriteCard(favorite))}
+          <div className="nav-buttons">
+            <button
+              onClick={() => navigate('/home')}
+              className="btn-secondary btn-sm"
+            >
+              🏠 Home
+            </button>
+            <button
+              onClick={() => navigate('/generate')}
+              className="btn-primary btn-sm"
+            >
+              Generate Recipes
+            </button>
+          </div>
         </div>
-      )}
+
+        {/* Error Message */}
+        {errorMsg && (
+          <div className="error-message">
+            {errorMsg}
+          </div>
+        )}
+
+        {/* Collections Filter */}
+        {collections.length > 0 && (
+          <div className="recipe-card mb-4">
+            <h3 className="mb-3">Filter by Collection</h3>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setSelectedCollection(null)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: selectedCollection === null ? '#007bff' : '#f8f9fa',
+                  color: selectedCollection === null ? 'white' : '#495057',
+                  border: '2px solid #e9ecef',
+                  borderRadius: '20px',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  minHeight: 'auto'
+                }}
+              >
+                All Favorites ({favorites.length})
+              </button>
+              {collections.map(collection => (
+                <button
+                  key={collection.id}
+                  onClick={() => setSelectedCollection(collection.id)}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: selectedCollection === collection.id ? '#007bff' : '#f8f9fa',
+                    color: selectedCollection === collection.id ? 'white' : '#495057',
+                    border: '2px solid #e9ecef',
+                    borderRadius: '20px',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    minHeight: 'auto'
+                  }}
+                >
+                  {collection.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Create Collection Section */}
+        <div className="recipe-card mb-4">
+          <div className="flex justify-between align-center mb-3">
+            <h3 style={{ margin: 0 }}>Collections</h3>
+            <button
+              onClick={() => setShowCreateCollection(!showCreateCollection)}
+              className="btn-warning btn-sm"
+            >
+              {showCreateCollection ? 'Cancel' : 'Create New Collection'}
+            </button>
+          </div>
+
+          {showCreateCollection && (
+            <div style={{ 
+              padding: '16px', 
+              backgroundColor: '#f8f9fa', 
+              borderRadius: '8px',
+              border: '1px solid #e9ecef'
+            }}>
+              <div className="form-group">
+                <label>Collection Name</label>
+                <input
+                  type="text"
+                  value={newCollectionName}
+                  onChange={(e) => setNewCollectionName(e.target.value)}
+                  placeholder="e.g., Quick Dinners, Healthy Snacks"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Description (Optional)</label>
+                <textarea
+                  value={newCollectionDescription}
+                  onChange={(e) => setNewCollectionDescription(e.target.value)}
+                  placeholder="Describe this collection..."
+                  rows={3}
+                  style={{ resize: 'vertical' }}
+                />
+              </div>
+              
+              <button
+                onClick={createCollection}
+                className="btn-success"
+                style={{ width: 'auto', minWidth: '150px' }}
+              >
+                Create Collection
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Favorites List */}
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
+            Loading favorites...
+          </div>
+        ) : favorites.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <div style={{ fontSize: '4rem', marginBottom: '16px' }}>💔</div>
+            <h3 style={{ color: '#6c757d', marginBottom: '8px' }}>No favorites yet</h3>
+            <p style={{ color: '#6c757d', marginBottom: '24px' }}>
+              Start favoriting recipes to see them here!
+            </p>
+            <button
+              onClick={() => navigate('/generate')}
+              className="btn-primary"
+              style={{ width: 'auto', minWidth: '200px' }}
+            >
+              Generate Some Recipes
+            </button>
+          </div>
+        ) : (
+          <div>
+            <div style={{ 
+              marginBottom: '24px', 
+              color: '#6c757d', 
+              fontSize: '0.875rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span>
+                Showing {favorites.length} favorite{favorites.length !== 1 ? 's' : ''}
+                {selectedCollection && collections.find(c => c.id === selectedCollection) && 
+                  ` in "${collections.find(c => c.id === selectedCollection).name}"`
+                }
+              </span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {favorites.map(favorite => renderFavoriteCard(favorite))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

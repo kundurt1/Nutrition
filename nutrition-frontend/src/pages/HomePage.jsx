@@ -10,9 +10,9 @@ export default function HomePage() {
   const [stats, setStats] = useState({
     totalRecipes: 0,
     totalGroceryItems: 0,
-    totalFavorites: 0, // Add favorites count
+    totalFavorites: 0,
     recentActivity: [],
-    recentFavorites: [], // Add recent favorites
+    recentFavorites: [],
     nutritionInsights: {
       totalCaloriesToday: 0,
       totalCaloriesWeek: 0,
@@ -40,8 +40,6 @@ export default function HomePage() {
         }
 
         setUser(user);
-        
-        // Fetch user stats
         await fetchUserStats(user.id);
         
       } catch (error) {
@@ -79,7 +77,7 @@ export default function HomePage() {
         .select('id, recipe_id, date, created_at, recipes!inner(title, cuisine, macro_estimate)')
         .eq('user_id', userId)
         .order('date', { ascending: false })
-        .limit(30); // Get last 30 meal logs
+        .limit(30);
 
       // Fetch favorites count and recent favorites
       let favoritesCount = 0;
@@ -146,36 +144,10 @@ export default function HomePage() {
       return acc;
     }, { protein: 0, carbs: 0, fat: 0, fiber: 0 });
 
-    // Find favorite cuisines from meal logs
-    const cuisineCount = {};
-    mealLogs.forEach(meal => {
-      const cuisine = meal.recipes?.cuisine || 'Unknown';
-      cuisineCount[cuisine] = (cuisineCount[cuisine] || 0) + 1;
-    });
-
-    const favoriteCuisines = Object.entries(cuisineCount)
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 3)
-      .map(([cuisine, count]) => ({ cuisine, count }));
-
-    // Find favorite meals (most frequently logged recipes)
-    const mealCount = {};
-    mealLogs.forEach(meal => {
-      const title = meal.recipes?.title || 'Unknown';
-      mealCount[title] = (mealCount[title] || 0) + 1;
-    });
-
-    const favoriteMeals = Object.entries(mealCount)
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 3)
-      .map(([title, count]) => ({ title, count }));
-
     return {
       totalCaloriesToday: Math.round(totalCaloriesToday),
       totalCaloriesWeek: Math.round(totalCaloriesWeek),
       avgCaloriesPerDay,
-      favoriteCuisines,
-      favoriteMeals,
       nutritionBreakdown: {
         protein: Math.round(nutritionBreakdown.protein),
         carbs: Math.round(nutritionBreakdown.carbs),
@@ -196,566 +168,251 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="card">
-        <p>Loading...</p>
+      <div className="app-container">
+        <div className="card">
+          <p className="text-center">Loading...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="card" style={{ maxWidth: '800px', margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: '32px',
-        paddingBottom: '16px',
-        borderBottom: '2px solid #f0f0f0'
-      }}>
-        <div>
-          <h1 style={{ margin: '0 0 8px 0', color: '#333' }}>Nutrition App</h1>
-          <p style={{ margin: 0, color: '#666', fontSize: '16px' }}>
-            Welcome back! Plan your meals and manage your grocery list.
-          </p>
-        </div>
-        <button
-          onClick={handleSignOut}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#f44336',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px'
-          }}
-        >
-          Sign Out
-        </button>
-      </div>
-
-      {/* Enhanced Stats Dashboard */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
-        gap: '16px', 
-        marginBottom: '32px' 
-      }}>
-        <div style={{
-          padding: '20px',
-          backgroundColor: '#e3f2fd',
-          borderRadius: '8px',
-          textAlign: 'center',
-          border: '1px solid #2196F3'
-        }}>
-          <h3 style={{ margin: '0 0 8px 0', color: '#1976d2', fontSize: '24px' }}>
-            {stats.totalRecipes}
-          </h3>
-          <p style={{ margin: 0, color: '#1976d2', fontSize: '14px' }}>
-            Recipes Created
-          </p>
-        </div>
-        
-        <div style={{
-          padding: '20px',
-          backgroundColor: '#e8f5e8',
-          borderRadius: '8px',
-          textAlign: 'center',
-          border: '1px solid #4CAF50'
-        }}>
-          <h3 style={{ margin: '0 0 8px 0', color: '#388e3c', fontSize: '24px' }}>
-            {stats.totalGroceryItems}
-          </h3>
-          <p style={{ margin: 0, color: '#388e3c', fontSize: '14px' }}>
-            Items to Buy
-          </p>
-        </div>
-
-        {/* NEW: Favorites Stat */}
-        <div style={{
-          padding: '20px',
-          backgroundColor: '#fce4ec',
-          borderRadius: '8px',
-          textAlign: 'center',
-          border: '1px solid #e91e63'
-        }}>
-          <h3 style={{ margin: '0 0 8px 0', color: '#c2185b', fontSize: '24px' }}>
-            {stats.totalFavorites}
-          </h3>
-          <p style={{ margin: 0, color: '#c2185b', fontSize: '14px' }}>
-            Favorite Recipes
-          </p>
-        </div>
-
-        <div style={{
-          padding: '20px',
-          backgroundColor: '#fff3e0',
-          borderRadius: '8px',
-          textAlign: 'center',
-          border: '1px solid #ff9800'
-        }}>
-          <h3 style={{ margin: '0 0 8px 0', color: '#f57c00', fontSize: '24px' }}>
-            {stats.nutritionInsights.totalCaloriesToday}
-          </h3>
-          <p style={{ margin: 0, color: '#f57c00', fontSize: '14px' }}>
-            Calories Today
-          </p>
-        </div>
-
-        <div style={{
-          padding: '20px',
-          backgroundColor: '#f3e5f5',
-          borderRadius: '8px',
-          textAlign: 'center',
-          border: '1px solid #9c27b0'
-        }}>
-          <h3 style={{ margin: '0 0 8px 0', color: '#7b1fa2', fontSize: '24px' }}>
-            {stats.nutritionInsights.avgCaloriesPerDay}
-          </h3>
-          <p style={{ margin: 0, color: '#7b1fa2', fontSize: '14px' }}>
-            Avg Calories/Day
-          </p>
-        </div>
-      </div>
-
-      {/* Nutrition Insights Section */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
-        gap: '20px', 
-        marginBottom: '32px' 
-      }}>
-        {/* Weekly Nutrition Breakdown */}
-        <div style={{
-          padding: '20px',
-          backgroundColor: '#f9f9f9',
-          borderRadius: '8px',
-          border: '1px solid #ddd'
-        }}>
-          <h3 style={{ margin: '0 0 16px 0', color: '#333', fontSize: '18px' }}>
-            📊 Weekly Nutrition
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div style={{ textAlign: 'center', padding: '12px', backgroundColor: '#fff', borderRadius: '6px' }}>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#e91e63' }}>
-                {stats.nutritionInsights.nutritionBreakdown.protein}g
-              </div>
-              <div style={{ fontSize: '12px', color: '#666' }}>Protein</div>
-            </div>
-            <div style={{ textAlign: 'center', padding: '12px', backgroundColor: '#fff', borderRadius: '6px' }}>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#2196f3' }}>
-                {stats.nutritionInsights.nutritionBreakdown.carbs}g
-              </div>
-              <div style={{ fontSize: '12px', color: '#666' }}>Carbs</div>
-            </div>
-            <div style={{ textAlign: 'center', padding: '12px', backgroundColor: '#fff', borderRadius: '6px' }}>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ff9800' }}>
-                {stats.nutritionInsights.nutritionBreakdown.fat}g
-              </div>
-              <div style={{ fontSize: '12px', color: '#666' }}>Fat</div>
-            </div>
-            <div style={{ textAlign: 'center', padding: '12px', backgroundColor: '#fff', borderRadius: '6px' }}>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#4caf50' }}>
-                {stats.nutritionInsights.nutritionBreakdown.fiber}g
-              </div>
-              <div style={{ fontSize: '12px', color: '#666' }}>Fiber</div>
-            </div>
-          </div>
-          <div style={{ 
-            marginTop: '12px', 
-            padding: '8px', 
-            backgroundColor: '#e3f2fd', 
-            borderRadius: '4px', 
-            textAlign: 'center',
-            fontSize: '14px',
-            color: '#1976d2'
-          }}>
-            Total Week: {stats.nutritionInsights.totalCaloriesWeek} calories
-          </div>
-        </div>
-
-        {/* Favorite Cuisines */}
-        <div style={{
-          padding: '20px',
-          backgroundColor: '#f9f9f9',
-          borderRadius: '8px',
-          border: '1px solid #ddd'
-        }}>
-          <h3 style={{ margin: '0 0 16px 0', color: '#333', fontSize: '18px' }}>
-            🌎 Favorite Cuisines
-          </h3>
-          {stats.nutritionInsights.favoriteCuisines.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {stats.nutritionInsights.favoriteCuisines.map((item, index) => (
-                <div key={index} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '8px 12px',
-                  backgroundColor: '#fff',
-                  borderRadius: '6px',
-                  border: '1px solid #eee'
-                }}>
-                  <span style={{ fontWeight: 'bold', color: '#333' }}>
-                    {item.cuisine}
-                  </span>
-                  <span style={{
-                    backgroundColor: '#4caf50',
-                    color: 'white',
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                    fontSize: '12px'
-                  }}>
-                    {item.count}x
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p style={{ color: '#666', fontSize: '14px', textAlign: 'center', margin: 0 }}>
-              Start logging meals to see your favorite cuisines!
+    <div className="app-container">
+      <div className="card-full">
+        {/* Header */}
+        <div className="nav-header">
+          <div>
+            <h1 style={{ textAlign: 'left', marginBottom: '8px' }}>Home Page</h1>
+            <p className="subtitle" style={{ textAlign: 'left', marginBottom: 0 }}>
+              Welcome back! Plan your meals and manage your grocery list.
             </p>
-          )}
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="btn-danger btn-sm"
+          >
+            Sign Out
+          </button>
         </div>
 
-        {/* NEW: Recent Favorites Section */}
-        <div style={{
-          padding: '20px',
-          backgroundColor: '#f9f9f9',
-          borderRadius: '8px',
-          border: '1px solid #ddd'
-        }}>
-          <h3 style={{ margin: '0 0 16px 0', color: '#333', fontSize: '18px' }}>
-            ❤️ Recent Favorites
-          </h3>
-          {stats.recentFavorites.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {stats.recentFavorites.slice(0, 3).map((favorite, index) => (
-                <div key={favorite.id} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '8px 12px',
-                  backgroundColor: '#fff',
-                  borderRadius: '6px',
-                  border: '1px solid #eee'
-                }}>
-                  <div>
-                    <span style={{ fontWeight: 'bold', color: '#333', fontSize: '14px' }}>
-                      {favorite.recipe_name && favorite.recipe_name.length > 20 
-                        ? favorite.recipe_name.substring(0, 20) + '...' 
-                        : favorite.recipe_name || 'Favorite Recipe'}
-                    </span>
-                    <div style={{ fontSize: '12px', color: '#888' }}>
-                      {new Date(favorite.favorited_at).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <span style={{
-                    backgroundColor: '#e91e63',
-                    color: 'white',
-                    padding: '2px 6px',
-                    borderRadius: '12px',
-                    fontSize: '12px'
-                  }}>
-                    ❤️
-                  </span>
-                </div>
-              ))}
-              {stats.totalFavorites > 3 && (
-                <div style={{ 
-                  textAlign: 'center', 
-                  marginTop: '8px',
-                  fontSize: '12px',
-                  color: '#666'
-                }}>
-                  +{stats.totalFavorites - 3} more favorites
-                </div>
-              )}
-            </div>
-          ) : (
-            <p style={{ color: '#666', fontSize: '14px', textAlign: 'center', margin: 0 }}>
-              Start favoriting recipes to see them here!
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Main Navigation Cards */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-        gap: '20px', 
-        marginBottom: '32px' 
-      }}>
-        {/* Generate Recipes Card */}
-        <div 
-          onClick={() => navigate('/generate')}
-          style={{
-            padding: '24px',
-            border: '2px solid #2196F3',
-            borderRadius: '12px',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            backgroundColor: '#fff',
-            textAlign: 'center'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#e3f2fd';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.3)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#fff';
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🍳</div>
-          <h3 style={{ margin: '0 0 12px 0', color: '#1976d2', fontSize: '20px' }}>
-            Generate Recipes
-          </h3>
-          <p style={{ margin: 0, color: '#666', fontSize: '14px', lineHeight: '1.4' }}>
-            Create personalized recipes based on your budget and dietary preferences
-          </p>
-          {stats.recentRecipes && stats.recentRecipes.length > 0 && (
-            <div style={{ marginTop: '12px', fontSize: '12px', color: '#888' }}>
-              Last created: {new Date(stats.recentRecipes[0].created_at).toLocaleDateString()}
-            </div>
-          )}
-        </div>
-
-        {/* NEW: Favorites Card */}
-        <div 
-          onClick={() => navigate('/favorites')}
-          style={{
-            padding: '24px',
-            border: '2px solid #e91e63',
-            borderRadius: '12px',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            backgroundColor: '#fff',
-            textAlign: 'center'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#fce4ec';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(233, 30, 99, 0.3)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#fff';
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>❤️</div>
-          <h3 style={{ margin: '0 0 12px 0', color: '#c2185b', fontSize: '20px' }}>
-            My Favorites
-          </h3>
-          <p style={{ margin: 0, color: '#666', fontSize: '14px', lineHeight: '1.4' }}>
-            Access your favorite recipes and create custom collections
-          </p>
-          {stats.totalFavorites > 0 && (
-            <div style={{ marginTop: '12px', fontSize: '12px', color: '#888' }}>
-              {stats.totalFavorites} favorite recipes saved
-            </div>
-          )}
-        </div>
-
-        {/* Grocery List Card */}
-        <div 
-          onClick={() => navigate('/grocery')}
-          style={{
-            padding: '24px',
-            border: '2px solid #4CAF50',
-            borderRadius: '12px',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            backgroundColor: '#fff',
-            textAlign: 'center'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#e8f5e8';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.3)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#fff';
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🛒</div>
-          <h3 style={{ margin: '0 0 12px 0', color: '#388e3c', fontSize: '20px' }}>
-            Grocery List
-          </h3>
-          <p style={{ margin: 0, color: '#666', fontSize: '14px', lineHeight: '1.4' }}>
-            Manage your shopping list and track items from your generated recipes
-          </p>
-          {stats.totalGroceryItems > 0 && (
-            <div style={{ marginTop: '12px', fontSize: '12px', color: '#888' }}>
-              {stats.totalGroceryItems} items waiting to be purchased
-            </div>
-          )}
-        </div>
-
-        {/* Preferences Card */}
-        <div 
-          onClick={() => navigate('/preferences')}
-          style={{
-            padding: '24px',
-            border: '2px solid #ff9800',
-            borderRadius: '12px',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            backgroundColor: '#fff',
-            textAlign: 'center'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#fff3e0';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 152, 0, 0.3)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#fff';
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚙️</div>
-          <h3 style={{ margin: '0 0 12px 0', color: '#f57c00', fontSize: '20px' }}>
-            Preferences
-          </h3>
-          <p style={{ margin: 0, color: '#666', fontSize: '14px', lineHeight: '1.4' }}>
-            Set your dietary restrictions, budget preferences, and allergies
-          </p>
-        </div>
-      </div>
-
-      {/* Recent Activity */}
-      {(stats.recentRecipes?.length > 0 || stats.recentGroceryItems?.length > 0) && (
-        <div style={{ 
-          padding: '20px', 
-          backgroundColor: '#f9f9f9', 
-          borderRadius: '8px',
-          marginBottom: '20px'
-        }}>
-          <h3 style={{ margin: '0 0 16px 0', color: '#333' }}>📈 Recent Activity</h3>
+        {/* Daily Insights Section */}
+        <div className="recipe-card mb-4">
+          <h2 className="mb-3" style={{ textAlign: 'left' }}>Daily Insights</h2>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            {/* Recent Recipes */}
-            {stats.recentRecipes?.length > 0 && (
-              <div>
-                <h4 style={{ margin: '0 0 8px 0', color: '#1976d2', fontSize: '16px' }}>
-                  🍳 Latest Recipes
-                </h4>
-                <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-                  {stats.recentRecipes.slice(0, 3).map((recipe, index) => (
-                    <li key={recipe.id} style={{ 
-                      padding: '8px 0', 
-                      fontSize: '14px', 
-                      color: '#666',
-                      borderBottom: index < 2 ? '1px solid #eee' : 'none'
-                    }}>
-                      <div style={{ fontWeight: 'bold', color: '#333' }}>{recipe.title}</div>
-                      <div style={{ fontSize: '12px', color: '#888' }}>
-                        {recipe.cuisine} • {new Date(recipe.created_at).toLocaleDateString()}
-                        {recipe.macro_estimate?.calories && (
-                          <span style={{ marginLeft: '8px', color: '#4caf50' }}>
-                            {recipe.macro_estimate.calories} cal
-                          </span>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+          <div className="nutrition-grid mb-3">
+            <div className="nutrition-item">
+              <span className="nutrition-value" style={{ color: '#e91e63' }}>
+                {stats.nutritionInsights.nutritionBreakdown.protein}g
+              </span>
+              <span className="nutrition-label">Protein</span>
+            </div>
+            <div className="nutrition-item">
+              <span className="nutrition-value" style={{ color: '#ff9800' }}>
+                {stats.nutritionInsights.nutritionBreakdown.fat}g
+              </span>
+              <span className="nutrition-label">Fats</span>
+            </div>
+            <div className="nutrition-item">
+              <span className="nutrition-value" style={{ color: '#2196f3' }}>
+                {stats.nutritionInsights.nutritionBreakdown.carbs}g
+              </span>
+              <span className="nutrition-label">Carbohydrates</span>
+            </div>
+          </div>
 
-            {/* Recent Grocery Items */}
-            {stats.recentGroceryItems?.length > 0 && (
-              <div>
-                <h4 style={{ margin: '0 0 8px 0', color: '#388e3c', fontSize: '16px' }}>
-                  🛒 Recent Grocery Items
-                </h4>
-                <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-                  {stats.recentGroceryItems.slice(0, 3).map((item, index) => (
-                    <li key={item.id} style={{ 
-                      padding: '8px 0', 
-                      fontSize: '14px', 
-                      color: '#666',
-                      borderBottom: index < 2 ? '1px solid #eee' : 'none',
-                      textDecoration: item.is_purchased ? 'line-through' : 'none'
-                    }}>
-                      <div style={{ fontWeight: 'bold', color: item.is_purchased ? '#4caf50' : '#333' }}>
-                        {item.name} {item.is_purchased ? '✓' : ''}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#888' }}>
-                        {new Date(item.created_at).toLocaleDateString()}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+          {/* Progress bars */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
+            {[
+              { label: 'Protein', value: 65, color: '#e91e63' },
+              { label: 'Fats', value: 65, color: '#ff9800' },
+              { label: 'Carbs', value: 65, color: '#2196f3' }
+            ].map((macro, index) => (
+              <div key={index} style={{ textAlign: 'center' }}>
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  background: `conic-gradient(${macro.color} ${macro.value * 3.6}deg, #e9ecef 0deg)`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 8px',
+                  position: 'relative'
+                }}>
+                  <div style={{
+                    width: '60px',
+                    height: '60px',
+                    backgroundColor: 'white',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: macro.color
+                  }}>
+                    {macro.value}%
+                  </div>
+                </div>
+                <div style={{ fontSize: '14px', color: '#6c757d' }}>{macro.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Recent Recipes Section */}
+        <div className="recipe-card mb-4">
+          <h3 className="mb-3" style={{ textAlign: 'left' }}>Recent Recipes</h3>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+            {stats.recentRecipes.length > 0 ? (
+              stats.recentRecipes.slice(0, 4).map((recipe, index) => (
+                <div key={recipe.id} style={{
+                  backgroundColor: '#f8f9fa',
+                  padding: '20px',
+                  borderRadius: '12px',
+                  border: '2px solid #e9ecef',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }} 
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#007bff';
+                  e.currentTarget.style.backgroundColor = '#f0f8ff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#e9ecef';
+                  e.currentTarget.style.backgroundColor = '#f8f9fa';
+                }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '12px' }}>
+                    {index === 0 ? '🍗' : index === 1 ? '🍤' : index === 2 ? '🥗' : '🍝'}
+                  </div>
+                  <h4 style={{ 
+                    fontSize: '1rem', 
+                    fontWeight: '600', 
+                    color: '#1a1a1a',
+                    marginBottom: '4px'
+                  }}>
+                    {recipe.title || `Recipe ${index + 1}`}
+                  </h4>
+                  <p style={{ 
+                    fontSize: '0.875rem', 
+                    color: '#6c757d', 
+                    margin: 0 
+                  }}>
+                    {recipe.cuisine || 'Unknown'}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px' }}>
+                <p style={{ color: '#6c757d', marginBottom: '16px' }}>No recipes yet</p>
+                <button 
+                  onClick={() => navigate('/generate')}
+                  className="btn-primary"
+                  style={{ width: 'auto', minWidth: '200px' }}
+                >
+                  Generate Your First Recipe
+                </button>
               </div>
             )}
           </div>
         </div>
-      )}
 
-      {/* Quick Actions */}
-      <div style={{ 
-        display: 'flex', 
-        gap: '12px', 
-        justifyContent: 'center',
-        marginTop: '20px'
-      }}>
-        <button
-          onClick={() => navigate('/generate')}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: '#2196F3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
+        {/* Calorie Tracker Section */}
+        <div className="recipe-card mb-4">
+          <div style={{
+            backgroundColor: '#f8f9fa',
+            padding: '40px',
+            borderRadius: '12px',
+            border: '2px solid #e9ecef',
+            textAlign: 'center',
             cursor: 'pointer',
-            fontSize: '16px',
-            fontWeight: 'bold'
+            transition: 'all 0.2s ease'
           }}
-        >
-          Start Cooking 🍳
-        </button>
-        
-        <button
-          onClick={() => navigate('/favorites')}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: '#e91e63',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '16px',
-            fontWeight: 'bold'
+          onClick={() => navigate('/nutrition')}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = '#28a745';
+            e.currentTarget.style.backgroundColor = '#f0fff4';
           }}
-        >
-          View Favorites ❤️
-        </button>
-        
-        <button
-          onClick={() => navigate('/grocery')}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: '#4CAF50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '16px',
-            fontWeight: 'bold'
-          }}
-        >
-          Go Shopping 🛒
-        </button>
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = '#e9ecef';
+            e.currentTarget.style.backgroundColor = '#f8f9fa';
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📊</div>
+            <h3 style={{ 
+              fontSize: '1.5rem', 
+              fontWeight: '600', 
+              color: '#1a1a1a',
+              marginBottom: '8px'
+            }}>
+              Calorie Tracker
+            </h3>
+            <p style={{ 
+              fontSize: '1rem', 
+              color: '#6c757d', 
+              margin: 0 
+            }}>
+              Today: {stats.nutritionInsights.totalCaloriesToday} calories
+            </p>
+          </div>
+        </div>
+
+        {/* Navigation Buttons */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', 
+          gap: '16px',
+          marginTop: '32px'
+        }}>
+          <button
+            onClick={() => navigate('/preferences')}
+            className="btn-secondary"
+            style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              padding: '20px',
+              height: 'auto',
+              gap: '8px'
+            }}
+          >
+            <span style={{ fontSize: '1.5rem' }}>⚙️</span>
+            Preferences
+          </button>
+          
+          <button
+            onClick={() => navigate('/generate')}
+            className="btn-primary"
+            style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              padding: '20px',
+              height: 'auto',
+              gap: '8px'
+            }}
+          >
+            <span style={{ fontSize: '1.5rem' }}>🍳</span>
+            Generate Recipes
+          </button>
+          
+          <button
+            onClick={() => navigate('/grocery')}
+            className="btn-success"
+            style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              padding: '20px',
+              height: 'auto',
+              gap: '8px'
+            }}
+          >
+            <span style={{ fontSize: '1.5rem' }}>🛒</span>
+            Grocery List
+          </button>
+        </div>
       </div>
     </div>
   );

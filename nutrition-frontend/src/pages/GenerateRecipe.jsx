@@ -2,12 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import RecipeRatings from '../components/RecipeRatings';
-import { Calendar, Clock, DollarSign, Users, ChefHat, ShoppingCart, Plus, X, Star, RefreshCw } from 'lucide-react';
 
 export default function GenerateRecipe() {
   const navigate = useNavigate();
   const [userId, setUserId] = useState(null);
-  const [activeTab, setActiveTab] = useState('generate'); // 'generate' or 'meal-plan'
+  const [activeTab, setActiveTab] = useState('generate'); // This was missing!
   
   // Recipe Generation State
   const [title, setTitle] = useState('');
@@ -16,10 +15,9 @@ export default function GenerateRecipe() {
   const [errorMsg, setErrorMsg] = useState('');
   const [recipeResults, setRecipeResults] = useState(null);
   const [regeneratingIndex, setRegeneratingIndex] = useState(null);
-  const [showGroceryList, setShowGroceryList] = useState(false);
   const [savingToGroceryList, setSavingToGroceryList] = useState(false);
 
-  // Meal Planning State
+  // Meal Planning State (this was missing!)
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState('week');
   const [plannedMeals, setPlannedMeals] = useState({});
@@ -69,12 +67,10 @@ export default function GenerateRecipe() {
     setTotalPrepTime(prepTime);
   }, [plannedMeals]);
 
-  // Existing recipe generation functions...
   const handleGenerate = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     setRecipeResults(null);
-    setShowGroceryList(false);
 
     if (!title.trim()) {
       setErrorMsg('Please enter a recipe title.');
@@ -130,6 +126,105 @@ export default function GenerateRecipe() {
       setErrorMsg(`Error: ${err.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRegenerateRecipe = async (recipeIndex) => {
+    if (!recipeResults || !userId) return;
+    
+    setRegeneratingIndex(recipeIndex);
+    try {
+      const currentRecipes = recipeResults.map(r => r.recipe_name || r.title || 'Recipe');
+      
+      const payload = {
+        title: title.trim(),
+        budget: parseFloat(budget),
+        user_id: userId,
+        regenerate_single: true,
+        exclude_recipes: currentRecipes
+      };
+      
+      const res = await fetch('http://localhost:8000/generate-single-recipe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to regenerate recipe');
+      }
+
+      const data = await res.json();
+      
+      if (data && data.recipe) {
+        const newRecipes = [...recipeResults];
+        newRecipes[recipeIndex] = data.recipe;
+        setRecipeResults(newRecipes);
+      }
+      
+    } catch (err) {
+      console.error('Recipe regeneration error:', err);
+      setErrorMsg(`Error regenerating recipe: ${err.message}`);
+    } finally {
+      setRegeneratingIndex(null);
+    }
+  };
+
+  const handleSaveToGroceryList = async () => {
+    if (!recipeResults || !userId) return;
+    
+    setSavingToGroceryList(true);
+    try {
+      const allGroceryItems = [];
+      
+      recipeResults.forEach(recipe => {
+        if (recipe.grocery_list && Array.isArray(recipe.grocery_list)) {
+          recipe.grocery_list.forEach(item => {
+            allGroceryItems.push({
+              item_name: item.item || item.name || 'Unknown item',
+              quantity: item.quantity || 1,
+              estimated_cost: item.estimated_cost || 0,
+              category: "Recipe Generated"
+            });
+          });
+        }
+      });
+
+      if (allGroceryItems.length === 0) {
+        alert('No grocery items found in recipes');
+        return;
+      }
+
+      const payload = {
+        user_id: userId,
+        grocery_items: allGroceryItems
+      };
+
+      const res = await fetch('http://localhost:8000/save-grocery-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to save grocery list');
+      }
+
+      const data = await res.json();
+      
+      const shouldNavigate = window.confirm(
+        `Successfully added ${data.inserted_items || 0} items to your grocery list! Would you like to view your grocery list now?`
+      );
+      
+      if (shouldNavigate) {
+        navigate('/grocery');
+      }
+      
+    } catch (err) {
+      console.error('Save grocery list error:', err);
+      setErrorMsg(`Error saving to grocery list: ${err.message}`);
+    } finally {
+      setSavingToGroceryList(false);
     }
   };
 
@@ -213,7 +308,6 @@ export default function GenerateRecipe() {
       [dateKey]: updatedMeals
     }));
 
-    // Save to backend
     await saveMealPlan(dateKey, updatedMeals);
   };
 
@@ -227,7 +321,6 @@ export default function GenerateRecipe() {
       [dateKey]: updatedMeals
     }));
 
-    // Save to backend
     await saveMealPlan(dateKey, updatedMeals);
   };
 
@@ -292,45 +385,76 @@ export default function GenerateRecipe() {
   // UI Components
   const RecipeCard = ({ recipe, isDraggable = true }) => (
     <div
-      className={`bg-white border rounded-lg p-3 shadow-sm transition-all duration-200 ${
-        isDraggable ? 'cursor-grab hover:shadow-md active:cursor-grabbing' : ''
-      }`}
+      className={`recipe-card ${isDraggable ? 'cursor-grab hover:shadow-md active:cursor-grabbing' : ''}`}
+      style={{
+        padding: '12px',
+        margin: '8px 0',
+        cursor: isDraggable ? 'grab' : 'default',
+        transition: 'all 0.2s ease'
+      }}
       draggable={isDraggable}
       onDragStart={(e) => isDraggable && handleDragStart(e, recipe)}
     >
-      <div className="flex justify-between items-start mb-2">
-        <h4 className="font-semibold text-sm text-gray-800 line-clamp-2">{recipe.recipe_name || recipe.title}</h4>
-        <div className="flex items-center text-xs text-yellow-600">
-          <Star className="w-3 h-3 fill-current" />
-          <span className="ml-1">{recipe.rating || 4.0}</span>
+      <div className="flex justify-between align-center mb-2">
+        <h4 style={{ 
+          fontSize: '0.875rem', 
+          fontWeight: '600', 
+          margin: 0,
+          lineHeight: '1.2'
+        }}>
+          {recipe.recipe_name || recipe.title}
+        </h4>
+        <div style={{ 
+          fontSize: '0.75rem', 
+          color: '#ffc107',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '2px'
+        }}>
+          <span>⭐</span>
+          <span>{recipe.rating || 4.0}</span>
         </div>
       </div>
       
-      <div className="space-y-1 text-xs text-gray-600">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <Clock className="w-3 h-3 mr-1" />
-            <span>{recipe.prep_time || '30m'}</span>
-          </div>
-          <div className="flex items-center">
-            <DollarSign className="w-3 h-3 mr-1" />
-            <span>${recipe.cost_estimate || recipe.cost}</span>
-          </div>
-        </div>
-        
-        <div className="flex items-center justify-between">
-          <span className="text-xs bg-gray-100 px-2 py-1 rounded">{recipe.cuisine}</span>
-          <span className="text-xs text-gray-500">{recipe.macros?.calories || recipe.calories} cal</span>
-        </div>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        fontSize: '0.75rem', 
+        color: '#6c757d',
+        marginBottom: '8px'
+      }}>
+        <span>⏱️ {recipe.prep_time || '30m'}</span>
+        <span>💰 ${recipe.cost_estimate || recipe.cost}</span>
+      </div>
+      
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between',
+        fontSize: '0.75rem'
+      }}>
+        <span style={{ 
+          backgroundColor: '#f8f9fa', 
+          padding: '2px 6px', 
+          borderRadius: '4px',
+          color: '#495057'
+        }}>
+          {recipe.cuisine}
+        </span>
+        <span style={{ color: '#6c757d' }}>
+          {recipe.macros?.calories || recipe.calories} cal
+        </span>
       </div>
 
-      <div className="flex flex-wrap gap-1 mt-2">
-        {recipe.tags?.slice(0, 2).map(tag => (
-          <span key={tag} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-            {tag}
-          </span>
-        ))}
-      </div>
+      {recipe.tags?.slice(0, 2).map(tag => (
+        <span key={tag} className="tag" style={{ 
+          fontSize: '0.6rem',
+          padding: '2px 6px',
+          margin: '4px 2px 0 0',
+          display: 'inline-block'
+        }}>
+          {tag}
+        </span>
+      ))}
     </div>
   );
 
@@ -340,41 +464,81 @@ export default function GenerateRecipe() {
     
     return (
       <div
-        className={`min-h-24 border border-gray-200 p-2 ${
-          isCurrentMonth ? 'bg-white' : 'bg-gray-50'
-        } ${isToday ? 'bg-blue-50 border-blue-300' : ''}`}
+        style={{
+          minHeight: '120px',
+          border: '2px solid #e9ecef',
+          borderRadius: '8px',
+          padding: '8px',
+          backgroundColor: isToday ? '#f0f8ff' : (isCurrentMonth ? 'white' : '#f8f9fa'),
+          borderColor: isToday ? '#007bff' : '#e9ecef'
+        }}
         onDragOver={handleDragOver}
         onDrop={(e) => handleDrop(e, date)}
       >
-        <div className="flex justify-between items-center mb-1">
-          <span className={`text-sm font-medium ${
-            isToday ? 'text-blue-600' : isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
-          }`}>
+        <div className="flex justify-between align-center mb-2">
+          <span style={{
+            fontSize: '0.875rem',
+            fontWeight: '600',
+            color: isToday ? '#007bff' : (isCurrentMonth ? '#333' : '#6c757d')
+          }}>
             {date.getDate()}
           </span>
           {meals.length > 0 && (
-            <span className="text-xs bg-green-100 text-green-700 px-1 rounded">
+            <span style={{
+              fontSize: '0.75rem',
+              backgroundColor: '#28a745',
+              color: 'white',
+              padding: '2px 6px',
+              borderRadius: '8px',
+              fontWeight: '500'
+            }}>
               {meals.length}
             </span>
           )}
         </div>
         
-        <div className="space-y-1">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {meals.slice(0, 2).map(meal => (
-            <div key={meal.id} className="relative group">
-              <div className="text-xs bg-blue-100 text-blue-800 p-1 rounded truncate">
+            <div key={meal.id} style={{ position: 'relative' }} className="group">
+              <div style={{
+                fontSize: '0.75rem',
+                backgroundColor: '#e3f2fd',
+                color: '#1976d2',
+                padding: '4px 6px',
+                borderRadius: '4px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
                 {meal.recipe_name || meal.name}
               </div>
               <button
                 onClick={() => removeMealFromDate(date, meal.id)}
-                className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-xs flex items-center justify-center"
+                style={{
+                  position: 'absolute',
+                  top: '-2px',
+                  right: '-2px',
+                  width: '16px',
+                  height: '16px',
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  fontSize: '10px',
+                  cursor: 'pointer',
+                  opacity: 0
+                }}
+                onMouseEnter={(e) => e.target.style.opacity = 1}
+                onMouseLeave={(e) => e.target.style.opacity = 0}
               >
-                <X className="w-2 h-2" />
+                ×
               </button>
             </div>
           ))}
           {meals.length > 2 && (
-            <div className="text-xs text-gray-500">+{meals.length - 2} more</div>
+            <div style={{ fontSize: '0.7rem', color: '#6c757d' }}>
+              +{meals.length - 2} more
+            </div>
           )}
         </div>
       </div>
@@ -383,86 +547,113 @@ export default function GenerateRecipe() {
 
   const weekDates = getWeekDates();
 
-  // Existing recipe generation render functions...
   const renderRecipe = (rec, idx) => {
     const recipeName = rec.recipe_name || rec.recipe_text?.split('\n')[0] || `Recipe ${idx + 1}`;
     const ingredients = rec.ingredients || [];
     const directions = rec.directions || [];
     const macros = rec.macros || {};
     const tags = rec.tags || [];
-    const groceryList = rec.grocery_list || [];
     
     return (
-      <div key={idx} style={{ marginBottom: '32px', border: '1px solid #ddd', padding: '16px', borderRadius: '8px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3>Recipe {idx + 1}: {recipeName}</h3>
-          <div className="flex gap-2">
+      <div key={idx} className="recipe-card">
+        <div className="recipe-header">
+          <div>
+            <h3 className="recipe-title">
+              {recipeName}
+            </h3>
+            <div style={{ 
+              display: 'flex', 
+              gap: '16px', 
+              marginTop: '8px',
+              fontSize: '0.875rem',
+              color: '#6c757d'
+            }}>
+              <span><strong>Cuisine:</strong> {rec.cuisine || 'Not specified'}</span>
+              <span><strong>Cost:</strong> ${typeof rec.cost_estimate === 'number' ? rec.cost_estimate.toFixed(2) : '0.00'}</span>
+            </div>
+          </div>
+          
+          <div className="recipe-actions">
             <button
               onClick={() => addMealToDate(new Date(), rec)}
-              className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+              className="btn-primary btn-sm"
+              style={{ marginRight: '8px' }}
             >
               Add to Meal Plan
             </button>
             <button
               onClick={() => handleRegenerateRecipe(idx)}
               disabled={regeneratingIndex === idx || loading}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: regeneratingIndex === idx ? '#ccc' : '#f44336',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: regeneratingIndex === idx ? 'not-allowed' : 'pointer',
-                fontSize: '14px'
-              }}
+              className="btn-danger btn-sm"
             >
               {regeneratingIndex === idx ? 'Regenerating...' : 'Regenerate'}
             </button>
           </div>
         </div>
 
-        {/* Rest of recipe rendering... */}
+        {/* Ingredients Section */}
         {ingredients.length > 0 && (
-          <>
+          <div className="recipe-section">
             <h4>Ingredients</h4>
-            <ul>
+            <ul className="ingredients-list">
               {ingredients.map((ing, i) => (
                 <li key={i}>
-                  {ing.quantity || ''} {ing.unit || ''} {ing.name || 'Unknown ingredient'}
+                  <strong>{ing.quantity || ''} {ing.unit || ''}</strong> {ing.name || 'Unknown ingredient'}
                 </li>
               ))}
             </ul>
-          </>
+          </div>
         )}
 
+        {/* Directions Section */}
         {directions.length > 0 && (
-          <>
+          <div className="recipe-section">
             <h4>Directions</h4>
-            <ol>
+            <ol className="directions-list">
               {directions.map((step, i) => (
                 <li key={i}>{step}</li>
               ))}
             </ol>
-          </>
+          </div>
         )}
 
-        <h4>Nutrition</h4>
-        <ul style={{ marginBottom: '16px' }}>
-          <li>Calories: {macros.calories || 'N/A'}</li>
-          <li>Protein: {macros.protein || 'N/A'}</li>
-          <li>Carbs: {macros.carbs || 'N/A'}</li>
-          <li>Fat: {macros.fat || 'N/A'}</li>
-          <li>Fiber: {macros.fiber || 'N/A'}</li>
-        </ul>
+        {/* Nutrition Section */}
+        <div className="recipe-section">
+          <h4>Nutrition Facts</h4>
+          <div className="nutrition-grid">
+            <div className="nutrition-item">
+              <span className="nutrition-value">{macros.calories || 'N/A'}</span>
+              <span className="nutrition-label">Calories</span>
+            </div>
+            <div className="nutrition-item">
+              <span className="nutrition-value">{macros.protein || 'N/A'}</span>
+              <span className="nutrition-label">Protein</span>
+            </div>
+            <div className="nutrition-item">
+              <span className="nutrition-value">{macros.carbs || 'N/A'}</span>
+              <span className="nutrition-label">Carbs</span>
+            </div>
+            <div className="nutrition-item">
+              <span className="nutrition-value">{macros.fat || 'N/A'}</span>
+              <span className="nutrition-label">Fat</span>
+            </div>
+            <div className="nutrition-item">
+              <span className="nutrition-value">{macros.fiber || 'N/A'}</span>
+              <span className="nutrition-label">Fiber</span>
+            </div>
+          </div>
+        </div>
 
-        <p><strong>Tags:</strong> {tags.length > 0 ? tags.join(', ') : 'None'}</p>
-        <p><strong>Cuisine:</strong> {rec.cuisine || 'Not specified'}</p>
-        <p><strong>Diet:</strong> {rec.diet || 'Not specified'}</p>
+        {/* Tags */}
+        {tags.length > 0 && (
+          <div className="tags-container">
+            {tags.map((tag, i) => (
+              <span key={i} className="tag">{tag}</span>
+            ))}
+          </div>
+        )}
 
-        <p style={{ fontStyle: 'italic' }}>
-          Estimated cost: ${typeof rec.cost_estimate === 'number' ? rec.cost_estimate.toFixed(2) : '0.00'}
-        </p>
-
+        {/* Recipe Rating Component */}
         <RecipeRatings 
           recipeData={rec}
           userId={userId}
@@ -473,336 +664,485 @@ export default function GenerateRecipe() {
   };
 
   return (
-    <div className="card" style={{ maxWidth: '1200px' }}>
-      {/* Tab Navigation */}
-      <div className="flex border-b border-gray-200 mb-6">
-        <button
-          onClick={() => setActiveTab('generate')}
-          className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
-            activeTab === 'generate'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <ChefHat className="w-4 h-4 inline mr-2" />
-          Generate Recipes
-        </button>
-        <button
-          onClick={() => setActiveTab('meal-plan')}
-          className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
-            activeTab === 'meal-plan'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <Calendar className="w-4 h-4 inline mr-2" />
-          Meal Planning
-        </button>
-      </div>
-
-      {/* Recipe Generation Tab */}
-      {activeTab === 'generate' && (
-        <div>
-          {/* Navigation Header */}
-          <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2>Generate 3 Recipes</h2>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => navigate('/home')}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#2196F3',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                🏠 Home
-              </button>
-              <button
-                onClick={() => navigate('/preferences')}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#9E9E9E',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                Preferences
-              </button>
-              <button
-                onClick={() => navigate('/grocery')}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#4CAF50',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                View Grocery List
-              </button>
-            </div>
-          </div>
-
-          {errorMsg && (
-            <div style={{ 
-              color: 'red', 
-              marginBottom: '12px', 
-              padding: '8px', 
-              backgroundColor: '#ffebee', 
-              borderRadius: '4px',
-              border: '1px solid #ffcdd2'
-            }}>
-              {errorMsg}
-            </div>
-          )}
-
-          <form onSubmit={handleGenerate}>
-            <div className="form-group">
-              <label htmlFor="title">Recipe Title</label>
-              <input
-                id="title"
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Quick Pasta Dishes"
-                required
-                disabled={loading}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="budget">Budget (USD)</label>
-              <input
-                id="budget"
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={budget}
-                onChange={(e) => setBudget(e.target.value)}
-                placeholder="e.g. 20.00"
-                required
-                disabled={loading}
-              />
-            </div>
-
-            <button 
-              className="primary" 
-              type="submit" 
-              disabled={loading || !userId}
-            >
-              {loading ? 'Generating…' : 'Generate 3 Recipes'}
-            </button>
-          </form>
-
-          {recipeResults && recipeResults.length > 0 && (
-            <div style={{ marginTop: '24px', textAlign: 'left' }}>
-              <h3>Generated Recipes</h3>
-              <p style={{ color: '#666', marginBottom: '16px' }}>
-                Don't like a recipe? Click "Regenerate" to get a new one or add it to your meal plan!
-              </p>
-              {recipeResults.map((rec, idx) => renderRecipe(rec, idx))}
-            </div>
-          )}
+    <div className="app-container">
+      <div className="card-full">
+        {/* Tab Navigation */}
+        <div className="tab-navigation">
+          <button
+            onClick={() => setActiveTab('generate')}
+            className={`tab-button ${activeTab === 'generate' ? 'active' : ''}`}
+          >
+            🍳 Generate Recipes
+          </button>
+          <button
+            onClick={() => setActiveTab('meal-plan')}
+            className={`tab-button ${activeTab === 'meal-plan' ? 'active' : ''}`}
+          >
+            📅 Meal Planning
+          </button>
         </div>
-      )}
 
-      {/* Meal Planning Tab */}
-      {activeTab === 'meal-plan' && (
-        <div>
-          {/* Meal Planning Header */}
-          <div className="bg-gray-50 rounded-lg p-6 mb-6">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        {/* Recipe Generation Tab */}
+        {activeTab === 'generate' && (
+          <div>
+            {/* Header */}
+            <div className="nav-header">
               <div>
-                <h2 className="text-xl font-bold text-gray-900 flex items-center">
-                  <Calendar className="w-6 h-6 mr-3 text-blue-600" />
-                  Smart Meal Planning
-                </h2>
-                <p className="text-gray-600 mt-1">Plan your weekly meals and generate grocery lists automatically</p>
+                <h1 style={{ textAlign: 'left' }}>Generate Recipes</h1>
+                <p className="subtitle" style={{ textAlign: 'left', marginBottom: 0 }}>
+                  Create personalized recipes based on your preferences and budget
+                </p>
               </div>
               
-              <div className="flex items-center space-x-4">
-                <div className="flex bg-gray-100 rounded-lg p-1">
-                  <button
-                    onClick={() => setViewMode('week')}
-                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                      viewMode === 'week' 
-                        ? 'bg-white text-gray-900 shadow-sm' 
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Week
-                  </button>
-                </div>
-                
+              <div className="nav-buttons">
                 <button
-                  onClick={() => setShowRecipePanel(!showRecipePanel)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+                  onClick={() => navigate('/home')}
+                  className="btn-secondary btn-sm"
                 >
-                  <ChefHat className="w-4 h-4 mr-2" />
-                  {showRecipePanel ? 'Hide' : 'Show'} Recipes
+                  🏠 Home
+                </button>
+                <button
+                  onClick={() => navigate('/preferences')}
+                  className="btn-secondary btn-sm"
+                >
+                  Preferences
+                </button>
+                <button
+                  onClick={() => navigate('/grocery')}
+                  className="btn-success btn-sm"
+                >
+                  View Grocery List
                 </button>
               </div>
             </div>
 
-            {/* Stats Bar */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-200">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">${totalBudget.toFixed(2)}</div>
-                <div className="text-sm text-gray-600">Weekly Budget</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">{Math.floor(totalPrepTime / 60)}h {totalPrepTime % 60}m</div>
-                <div className="text-sm text-gray-600">Total Prep Time</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">{Object.keys(plannedMeals).length}</div>
-                <div className="text-sm text-gray-600">Planned Days</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">{availableRecipes.length}</div>
-                <div className="text-sm text-gray-600">Available Recipes</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-6">
-            {/* Recipe Panel */}
-            {showRecipePanel && (
-              <div className="w-80 bg-white rounded-lg shadow-sm p-4 border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">Your Recipes</h3>
-                  <button onClick={loadAvailableRecipes} className="text-gray-400 hover:text-gray-600">
-                    <RefreshCw className="w-4 h-4" />
-                  </button>
-                </div>
-                
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {availableRecipes.length > 0 ? (
-                    availableRecipes.map(recipe => (
-                      <RecipeCard key={recipe.id} recipe={recipe} />
-                    ))
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <ChefHat className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                      <p>No recipes available</p>
-                      <p className="text-sm">Generate some recipes first!</p>
-                    </div>
-                  )}
-                </div>
-
-                <button 
-                  onClick={() => setActiveTab('generate')}
-                  className="w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Generate New Recipes
-                </button>
+            {/* Error Message */}
+            {errorMsg && (
+              <div className="error-message">
+                {errorMsg}
               </div>
             )}
 
-            {/* Calendar */}
-            <div className="flex-1">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-                {/* Calendar Header */}
-                <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                  <button
-                    onClick={() => navigateCalendar(-1)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    ←
-                  </button>
-                  
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Week of {weekDates[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  </h3>
-                  
-                  <button
-                    onClick={() => navigateCalendar(1)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    →
-                  </button>
+            {/* Recipe Generation Form */}
+            <div className="recipe-card mb-4">
+              <h2 className="mb-3" style={{ textAlign: 'left' }}>Generate 3 Recipes</h2>
+              <p style={{ color: '#6c757d', marginBottom: '24px' }}>
+                Enter what type of meals you'd like and your budget to get started
+              </p>
+              
+              <form onSubmit={handleGenerate}>
+                <div className="form-group">
+                  <label htmlFor="title">Type of Meals</label>
+                  <input
+                    id="title"
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="eg. Quick Pasta Dishes"
+                    required
+                    disabled={loading}
+                  />
                 </div>
 
-                {/* Calendar Grid */}
-                <div className="grid grid-cols-7 gap-0">
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <div key={day} className="p-3 border-b border-gray-200 font-medium text-sm text-gray-700 text-center">
-                      {day}
-                    </div>
-                  ))}
-                  {weekDates.map(date => (
-                    <DayCell
-                      key={formatDate(date)}
-                      date={date}
-                      meals={getMealsForDate(date)}
-                    />
-                  ))}
+                <div className="form-group">
+                  <label htmlFor="budget">Budget (USD)</label>
+                  <input
+                    id="budget"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                    placeholder="e.g. 20.00"
+                    required
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button 
+                    className="btn-primary" 
+                    type="submit" 
+                    disabled={loading || !userId}
+                    style={{ flex: 1 }}
+                  >
+                    {loading ? 'Generating…' : 'Generate'}
+                  </button>
+                  
+                  {recipeResults && recipeResults.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleSaveToGroceryList}
+                      disabled={savingToGroceryList}
+                      className="btn-success"
+                      style={{ 
+                        flex: 1,
+                        backgroundColor: '#28a745'
+                      }}
+                    >
+                      {savingToGroceryList ? 'Adding...' : 'Generate Grocery List'}
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+
+            {/* Generated Recipes */}
+            {recipeResults && recipeResults.length > 0 && (
+              <div>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  marginBottom: '24px'
+                }}>
+                  <h2 style={{ margin: 0 }}>Generated Recipes</h2>
+                  <p style={{ 
+                    color: '#6c757d', 
+                    margin: 0,
+                    fontSize: '0.875rem'
+                  }}>
+                    Don't like a recipe? Click "Regenerate" to get a new one!
+                  </p>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  {recipeResults.map((rec, idx) => renderRecipe(rec, idx))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!recipeResults && !loading && (
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '60px 20px',
+                color: '#6c757d'
+              }}>
+                <div style={{ fontSize: '4rem', marginBottom: '16px' }}>🍳</div>
+                <h3 style={{ marginBottom: '8px' }}>Ready to Cook?</h3>
+                <p>Enter your meal preferences above to generate personalized recipes!</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Meal Planning Tab */}
+        {activeTab === 'meal-plan' && (
+          <div>
+            {/* Meal Planning Header */}
+            <div className="recipe-card mb-4">
+              <div className="flex justify-between align-center mb-3">
+                <div>
+                  <h2 style={{ margin: 0, textAlign: 'left' }}>📅 Smart Meal Planning</h2>
+                  <p style={{ color: '#6c757d', margin: '4px 0 0 0' }}>
+                    Plan your weekly meals and generate grocery lists automatically
+                  </p>
+                </div>
+                
+                <div className="flex align-center gap-2">
+                  <button
+                    onClick={() => setShowRecipePanel(!showRecipePanel)}
+                    className="btn-primary btn-sm"
+                  >
+                    🍳 {showRecipePanel ? 'Hide' : 'Show'} Recipes
+                  </button>
                 </div>
               </div>
 
-              {/* Generate Grocery List Button */}
-              {Object.keys(plannedMeals).length > 0 && (
-                <div className="mt-4 text-center">
-                  <button
-                    onClick={generateGroceryListFromMealPlan}
-                    disabled={mealPlanLoading}
-                    className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center mx-auto"
+              {/* Stats Bar */}
+              <div className="nutrition-grid">
+                <div className="nutrition-item">
+                  <span className="nutrition-value" style={{ color: '#007bff' }}>
+                    ${totalBudget.toFixed(2)}
+                  </span>
+                  <span className="nutrition-label">Weekly Budget</span>
+                </div>
+                <div className="nutrition-item">
+                  <span className="nutrition-value" style={{ color: '#28a745' }}>
+                    {Math.floor(totalPrepTime / 60)}h {totalPrepTime % 60}m
+                  </span>
+                  <span className="nutrition-label">Total Prep Time</span>
+                </div>
+                <div className="nutrition-item">
+                  <span className="nutrition-value" style={{ color: '#6f42c1' }}>
+                    {Object.keys(plannedMeals).length}
+                  </span>
+                  <span className="nutrition-label">Planned Days</span>
+                </div>
+                <div className="nutrition-item">
+                  <span className="nutrition-value" style={{ color: '#fd7e14' }}>
+                    {availableRecipes.length}
+                  </span>
+                  <span className="nutrition-label">Available Recipes</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              {/* Recipe Panel */}
+              {showRecipePanel && (
+                <div style={{
+                  width: '320px',
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  border: '2px solid #e9ecef',
+                  padding: '16px',
+                  height: 'fit-content'
+                }}>
+                  <div className="flex justify-between align-center mb-3">
+                    <h3 style={{ margin: 0, fontSize: '1.125rem' }}>Your Recipes</h3>
+                    <button 
+                      onClick={loadAvailableRecipes} 
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#6c757d',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        padding: '4px'
+                      }}
+                    >
+                      🔄
+                    </button>
+                  </div>
+                  
+                  <div style={{ 
+                    maxHeight: '400px', 
+                    overflowY: 'auto',
+                    marginBottom: '16px'
+                  }}>
+                    {availableRecipes.length > 0 ? (
+                      availableRecipes.map(recipe => (
+                        <RecipeCard key={recipe.id} recipe={recipe} />
+                      ))
+                    ) : (
+                      <div style={{ 
+                        textAlign: 'center', 
+                        padding: '32px 16px',
+                        color: '#6c757d'
+                      }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🍳</div>
+                        <p style={{ fontSize: '0.875rem', margin: 0 }}>No recipes available</p>
+                        <p style={{ fontSize: '0.75rem', margin: '4px 0 0 0' }}>Generate some recipes first!</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={() => setActiveTab('generate')}
+                    className="btn-primary"
+                    style={{ width: '100%' }}
                   >
-                    <ShoppingCart className="w-4 h-4 mr-2" />
-                    {mealPlanLoading ? 'Generating...' : 'Generate Grocery List from Meal Plan'}
+                    ➕ Generate New Recipes
                   </button>
                 </div>
               )}
-            </div>
-          </div>
 
-          {/* Prep Time Optimization */}
-          {Object.keys(plannedMeals).length > 0 && (
-            <div className="mt-6 bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                <Clock className="w-5 h-5 mr-2 text-blue-600" />
-                Prep Time Optimization Tips
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-blue-900 mb-2">Meal Prep Day</h4>
-                  <p className="text-sm text-blue-700">Sunday: Prep ingredients in bulk to save time during the week</p>
-                  <p className="text-xs text-blue-600 mt-1">Can save up to 45 minutes daily</p>
+              {/* Calendar */}
+              <div style={{ flex: 1 }}>
+                <div style={{
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  border: '2px solid #e9ecef'
+                }}>
+                  {/* Calendar Header */}
+                  <div className="flex justify-between align-center" style={{ 
+                    padding: '16px', 
+                    borderBottom: '2px solid #f8f9fa' 
+                  }}>
+                    <button
+                      onClick={() => navigateCalendar(-1)}
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: '#f8f9fa',
+                        border: '2px solid #e9ecef',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        minHeight: 'auto'
+                      }}
+                    >
+                      ←
+                    </button>
+                    
+                    <h3 style={{ margin: 0, fontSize: '1.125rem', color: '#333' }}>
+                      Week of {weekDates[0].toLocaleDateString('en-US', { 
+                        month: 'long', 
+                        day: 'numeric', 
+                        year: 'numeric' 
+                      })}
+                    </h3>
+                    
+                    <button
+                      onClick={() => navigateCalendar(1)}
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: '#f8f9fa',
+                        border: '2px solid #e9ecef',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        minHeight: 'auto'
+                      }}
+                    >
+                      →
+                    </button>
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(7, 1fr)', 
+                    gap: '0' 
+                  }}>
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                      <div key={day} style={{
+                        padding: '12px',
+                        borderBottom: '2px solid #f8f9fa',
+                        fontSize: '0.875rem',
+                        fontWeight: '600',
+                        color: '#495057',
+                        textAlign: 'center',
+                        backgroundColor: '#f8f9fa'
+                      }}>
+                        {day}
+                      </div>
+                    ))}
+                    {weekDates.map(date => (
+                      <DayCell
+                        key={formatDate(date)}
+                        date={date}
+                        meals={getMealsForDate(date)}
+                      />
+                    ))}
+                  </div>
                 </div>
-                
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-green-900 mb-2">Batch Cooking</h4>
-                  <p className="text-sm text-green-700">Cook larger portions for easy leftovers and quick reheats</p>
-                  <p className="text-xs text-green-600 mt-1">Perfect for busy weeknight dinners</p>
-                </div>
-                
-                <div className="bg-yellow-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-yellow-900 mb-2">Smart Scheduling</h4>
-                  <p className="text-sm text-yellow-700">Plan quick meals on your busiest days</p>
-                  <p className="text-xs text-yellow-600 mt-1">Based on your weekly routine</p>
-                </div>
+
+                {/* Generate Grocery List Button */}
+                {Object.keys(plannedMeals).length > 0 && (
+                  <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                    <button
+                      onClick={generateGroceryListFromMealPlan}
+                      disabled={mealPlanLoading}
+                      className="btn-success"
+                      style={{ 
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      🛒 {mealPlanLoading ? 'Generating...' : 'Generate Grocery List from Meal Plan'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Prep Time Optimization */}
+            {Object.keys(plannedMeals).length > 0 && (
+              <div className="recipe-card mt-4">
+                <h3 className="mb-3" style={{ textAlign: 'left' }}>
+                  ⏱️ Prep Time Optimization Tips
+                </h3>
+                
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+                  gap: '16px' 
+                }}>
+                  <div style={{
+                    backgroundColor: '#e3f2fd',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    border: '1px solid #2196f3'
+                  }}>
+                    <h4 style={{ color: '#1565c0', marginBottom: '8px', fontSize: '1rem' }}>
+                      Meal Prep Day
+                    </h4>
+                    <p style={{ 
+                      fontSize: '0.875rem', 
+                      color: '#1976d2', 
+                      margin: '0 0 4px 0' 
+                    }}>
+                      Sunday: Prep ingredients in bulk to save time during the week
+                    </p>
+                    <p style={{ fontSize: '0.75rem', color: '#1565c0', margin: 0 }}>
+                      Can save up to 45 minutes daily
+                    </p>
+                  </div>
+                  
+                  <div style={{
+                    backgroundColor: '#e8f5e8',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    border: '1px solid #4caf50'
+                  }}>
+                    <h4 style={{ color: '#2e7d32', marginBottom: '8px', fontSize: '1rem' }}>
+                      Batch Cooking
+                    </h4>
+                    <p style={{ 
+                      fontSize: '0.875rem', 
+                      color: '#388e3c', 
+                      margin: '0 0 4px 0' 
+                    }}>
+                      Cook larger portions for easy leftovers and quick reheats
+                    </p>
+                    <p style={{ fontSize: '0.75rem', color: '#2e7d32', margin: 0 }}>
+                      Perfect for busy weeknight dinners
+                    </p>
+                  </div>
+                  
+                  <div style={{
+                    backgroundColor: '#fff8e1',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    border: '1px solid #ffc107'
+                  }}>
+                    <h4 style={{ color: '#f57c00', marginBottom: '8px', fontSize: '1rem' }}>
+                      Smart Scheduling
+                    </h4>
+                    <p style={{ 
+                      fontSize: '0.875rem', 
+                      color: '#ff8f00', 
+                      margin: '0 0 4px 0' 
+                    }}>
+                      Plan quick meals on your busiest days
+                    </p>
+                    <p style={{ fontSize: '0.75rem', color: '#f57c00', margin: 0 }}>
+                      Based on your weekly routine
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Empty State for Meal Planning */}
+            {Object.keys(plannedMeals).length === 0 && (
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '60px 20px',
+                color: '#6c757d'
+              }}>
+                <div style={{ fontSize: '4rem', marginBottom: '16px' }}>📅</div>
+                <h3 style={{ marginBottom: '8px' }}>Start Planning Your Meals</h3>
+                <p style={{ marginBottom: '24px' }}>
+                  Drag recipes from the panel to calendar days, or generate new recipes to get started!
+                </p>
+                {!showRecipePanel && (
+                  <button
+                    onClick={() => setShowRecipePanel(true)}
+                    className="btn-primary"
+                    style={{ width: 'auto', minWidth: '200px' }}
+                  >
+                    Show Recipe Panel
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
-
-// Additional functions that were referenced but cut off...
-const handleRegenerateRecipe = async (recipeIndex) => {
-  // Implementation for regenerating recipes
-  console.log('Regenerating recipe at index:', recipeIndex);
-};

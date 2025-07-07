@@ -68,9 +68,7 @@ export default function GroceryList() {
       'canned tomatoes', 'tomato paste', 'coconut milk', 'broth',
       'chicken broth', 'vegetable broth', 'beef broth'
     ],
-    'Recipe Generated': [
-      // This will catch items added from recipes
-    ],
+    'Recipe Generated': [],
     'Frozen and Misc': [
       'frozen vegetables', 'frozen fruit', 'frozen pizza', 'ice cream',
       'frozen dinners', 'frozen chicken', 'frozen fish', 'frozen shrimp',
@@ -108,7 +106,7 @@ export default function GroceryList() {
       console.error('Error fetching grocery items:', itemsError)
       return []
     } else {
-      console.log('Fetched grocery items:', groceryItems) // Debug log
+      console.log('Fetched grocery items:', groceryItems)
       return groceryItems || []
     }
   }
@@ -139,7 +137,6 @@ export default function GroceryList() {
   useEffect(() => {
     if (!user) return
 
-    // Set up real-time listener for grocery_items table
     const channel = supabase
       .channel('grocery_items_changes')
       .on(
@@ -152,7 +149,6 @@ export default function GroceryList() {
         },
         async (payload) => {
           console.log('Real-time update received:', payload)
-          // Refresh the items when changes occur
           const updatedItems = await fetchItems(user.id)
           setItems(updatedItems)
         }
@@ -163,15 +159,6 @@ export default function GroceryList() {
       supabase.removeChannel(channel)
     }
   }, [user])
-
-  // Add a manual refresh function
-  const refreshItems = async () => {
-    if (!user) return
-    setLoading(true)
-    const groceryItems = await fetchItems(user.id)
-    setItems(groceryItems)
-    setLoading(false)
-  }
 
   const addItem = async () => {
     if (!input.trim() || !user) return
@@ -185,8 +172,8 @@ export default function GroceryList() {
       quantity: quantity.trim() || '1',
       unit: unit || '',
       category: category,
-      item_name: input.trim(), // Add this field too for consistency
-      estimated_cost: 0.0, // Default cost
+      item_name: input.trim(),
+      estimated_cost: 0.0,
       is_purchased: false
     }
     
@@ -227,7 +214,6 @@ export default function GroceryList() {
     setLoading(false)
   }
 
-  // Toggle purchased status
   const togglePurchased = async (id, currentStatus) => {
     setLoading(true)
     
@@ -261,7 +247,7 @@ export default function GroceryList() {
   }, {})
 
   const categories = [
-    'Recipe Generated', // Show recipe items first
+    'Recipe Generated',
     'Proteins',
     'Produce', 
     'Grains and Carbs',
@@ -272,361 +258,392 @@ export default function GroceryList() {
 
   if (loading && !user) {
     return (
-      <div className="card">
-        <p>Loading...</p>
+      <div className="app-container">
+        <div className="card">
+          <p className="text-center">Loading...</p>
+        </div>
       </div>
     )
   }
 
-  // Count total items and purchased items
   const totalItems = items.length
   const purchasedItems = items.filter(item => item.is_purchased).length
   const unpurchasedItems = totalItems - purchasedItems
   const totalCost = items.reduce((sum, item) => sum + (parseFloat(item.estimated_cost) || 0), 0)
 
   return (
-    <div className="card">
-      <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button className="back-button" onClick={() => navigate('/generate')} style={{
-            padding: '8px 12px',
-            backgroundColor: '#9E9E9E',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}>
-            ← Generate
-          </button>
-          <h2 style={{ margin: 0 }}>Grocery List</h2>
-        </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button 
-            onClick={refreshItems}
-            disabled={loading}
-            style={{
-              padding: '8px 12px',
-              backgroundColor: '#2196F3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            {loading ? '...' : 'Refresh'}
-          </button>
-          <div style={{ fontSize: '14px', color: '#666' }}>
-            {unpurchasedItems} items • ${totalCost.toFixed(2)}
-          </div>
-        </div>
-      </div>
-
-      {/* Summary Stats */}
-      {totalItems > 0 && (
-        <div style={{ 
-          marginBottom: '20px', 
-          padding: '12px', 
-          backgroundColor: '#f5f5f5', 
-          borderRadius: '8px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
+    <div className="app-container">
+      <div className="card-full">
+        {/* Header */}
+        <div className="nav-header">
           <div>
-            <strong>Total: {totalItems} items</strong>
-            {purchasedItems > 0 && (
-              <span style={{ marginLeft: '16px', color: '#4CAF50' }}>
-                ✓ {purchasedItems} purchased
-              </span>
-            )}
+            <h1 style={{ textAlign: 'left' }}>Grocery List</h1>
+            <p className="subtitle" style={{ textAlign: 'left', marginBottom: 0 }}>
+              Manage your shopping list and track your purchases
+            </p>
           </div>
-          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#4CAF50' }}>
-            Estimated Cost: ${totalCost.toFixed(2)}
+          
+          <div className="nav-buttons">
+            <button
+              onClick={() => navigate('/home')}
+              className="btn-secondary btn-sm"
+            >
+              🏠 Home
+            </button>
+            <button 
+              onClick={() => navigate('/generate')}
+              className="btn-secondary btn-sm"
+            >
+              ← Generate
+            </button>
           </div>
         </div>
-      )}
 
-      {/* Show categories with items */}
-      <div className="categories-with-items">
-        {categories.map((category) => {
-          const categoryItems = groupedItems[category] || []
-          const hasItems = categoryItems.length > 0
+        {/* Summary Stats */}
+        {totalItems > 0 && (
+          <div className="recipe-card mb-4">
+            <div className="flex justify-between align-center">
+              <div>
+                <h3 style={{ marginBottom: '8px' }}>Shopping Summary</h3>
+                <div style={{ display: 'flex', gap: '24px', fontSize: '0.875rem', color: '#6c757d' }}>
+                  <span><strong>{totalItems}</strong> total items</span>
+                  {purchasedItems > 0 && (
+                    <span style={{ color: '#28a745' }}>
+                      <strong>{purchasedItems}</strong> purchased
+                    </span>
+                  )}
+                  <span><strong>{unpurchasedItems}</strong> remaining</span>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#28a745' }}>
+                  ${totalCost.toFixed(2)}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#6c757d' }}>
+                  Estimated Cost
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Category Sections */}
+        <div className="mb-4">
+          {categories.map((category) => {
+            const categoryItems = groupedItems[category] || []
+            const hasItems = categoryItems.length > 0
+            
+            if (!hasItems) return null
+            
+            return (
+              <div key={category} className="recipe-card mb-3">
+                <div className="flex justify-between align-center mb-3">
+                  <h3 style={{ 
+                    margin: 0, 
+                    color: category === 'Recipe Generated' ? '#28a745' : '#333',
+                    fontSize: '1.125rem'
+                  }}>
+                    {category === 'Recipe Generated' ? '🍳 From Recipes' : category}
+                  </h3>
+                  <span style={{ 
+                    fontSize: '0.875rem',
+                    color: '#6c757d',
+                    backgroundColor: '#f8f9fa',
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    fontWeight: '500'
+                  }}>
+                    {categoryItems.length} items
+                  </span>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {categoryItems.map((item) => (
+                    <div key={item.id} style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '12px',
+                      backgroundColor: item.is_purchased ? '#f8f9fa' : '#fff',
+                      border: '2px solid #e9ecef',
+                      borderRadius: '8px',
+                      opacity: item.is_purchased ? 0.7 : 1,
+                      transition: 'all 0.2s ease'
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          fontSize: '1rem',
+                          color: '#333',
+                          fontWeight: '500',
+                          textDecoration: item.is_purchased ? 'line-through' : 'none',
+                          marginBottom: '4px'
+                        }}>
+                          {item.name}
+                        </div>
+                        <div style={{ 
+                          fontSize: '0.875rem', 
+                          color: '#6c757d',
+                          display: 'flex',
+                          gap: '16px'
+                        }}>
+                          <span>{item.quantity} {item.unit}</span>
+                          {item.estimated_cost > 0 && (
+                            <span style={{ color: '#28a745', fontWeight: '500' }}>
+                              ${parseFloat(item.estimated_cost).toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          onClick={() => togglePurchased(item.id, item.is_purchased)}
+                          disabled={loading}
+                          style={{
+                            padding: '8px 12px',
+                            backgroundColor: item.is_purchased ? '#28a745' : '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '0.875rem',
+                            cursor: 'pointer',
+                            minHeight: '36px',
+                            fontWeight: '500'
+                          }}
+                        >
+                          {item.is_purchased ? '✓ Bought' : 'Buy'}
+                        </button>
+                        <button 
+                          onClick={() => removeItem(item.id)} 
+                          disabled={loading}
+                          style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '0.875rem',
+                            cursor: 'pointer',
+                            minHeight: '36px',
+                            fontWeight: '500'
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
           
-          if (!hasItems) return null // Don't show empty categories
-          
-          return (
-            <div key={category} className={`category-section ${hasItems ? 'has-items' : ''}`} style={{
-              marginBottom: '24px',
-              border: '1px solid #ddd',
-              borderRadius: '8px',
-              padding: '16px'
-            }}>
-              <div className="category-header" style={{ marginBottom: '12px' }}>
-                <h3 className="category-title" style={{ 
-                  margin: 0, 
-                  color: category === 'Recipe Generated' ? '#4CAF50' : '#333',
-                  fontSize: '18px'
+          {/* Show uncategorized items if any */}
+          {groupedItems['Uncategorized'] && groupedItems['Uncategorized'].length > 0 && (
+            <div className="recipe-card mb-3">
+              <div className="flex justify-between align-center mb-3">
+                <h3 style={{ margin: 0, fontSize: '1.125rem' }}>Other Items</h3>
+                <span style={{ 
+                  fontSize: '0.875rem',
+                  color: '#6c757d',
+                  backgroundColor: '#f8f9fa',
+                  padding: '4px 8px',
+                  borderRadius: '12px',
+                  fontWeight: '500'
                 }}>
-                  {category === 'Recipe Generated' ? '🍳 From Recipes' : category}
-                </h3>
-                <span className="item-count" style={{ color: '#666', fontSize: '14px' }}>
-                  ({categoryItems.length} items)
+                  {groupedItems['Uncategorized'].length} items
                 </span>
               </div>
               
-              <div className="category-items">
-                {categoryItems.map((item) => (
-                  <div key={item.id} className="item" style={{
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {groupedItems['Uncategorized'].map((item) => (
+                  <div key={item.id} style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '8px 0',
-                    borderBottom: '1px solid #eee',
-                    opacity: item.is_purchased ? 0.6 : 1
+                    padding: '12px',
+                    backgroundColor: item.is_purchased ? '#f8f9fa' : '#fff',
+                    border: '2px solid #e9ecef',
+                    borderRadius: '8px',
+                    opacity: item.is_purchased ? 0.7 : 1
                   }}>
-                    <div className="item-info" style={{ flex: 1 }}>
-                      <span className="item-name" style={{
-                        fontWeight: 'bold',
-                        textDecoration: item.is_purchased ? 'line-through' : 'none'
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontSize: '1rem',
+                        color: '#333',
+                        fontWeight: '500',
+                        textDecoration: item.is_purchased ? 'line-through' : 'none',
+                        marginBottom: '4px'
                       }}>
                         {item.name}
-                      </span>
-                      <span className="item-details" style={{ 
-                        marginLeft: '8px', 
-                        color: '#666',
-                        fontSize: '14px'
+                      </div>
+                      <div style={{ 
+                        fontSize: '0.875rem', 
+                        color: '#6c757d',
+                        display: 'flex',
+                        gap: '16px'
                       }}>
-                        {item.quantity} {item.unit}
+                        <span>{item.quantity} {item.unit}</span>
                         {item.estimated_cost > 0 && (
-                          <span style={{ marginLeft: '8px', color: '#4CAF50' }}>
+                          <span style={{ color: '#28a745', fontWeight: '500' }}>
                             ${parseFloat(item.estimated_cost).toFixed(2)}
                           </span>
                         )}
-                      </span>
+                      </div>
                     </div>
+                    
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button 
                         onClick={() => togglePurchased(item.id, item.is_purchased)}
+                        disabled={loading}
                         style={{
-                          padding: '4px 8px',
-                          backgroundColor: item.is_purchased ? '#4CAF50' : '#2196F3',
+                          padding: '8px 12px',
+                          backgroundColor: item.is_purchased ? '#28a745' : '#007bff',
                           color: 'white',
                           border: 'none',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          cursor: 'pointer'
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          cursor: 'pointer',
+                          minHeight: '36px',
+                          fontWeight: '500'
                         }}
-                        disabled={loading}
                       >
-                        {item.is_purchased ? '✓' : 'Buy'}
+                        {item.is_purchased ? '✓ Bought' : 'Buy'}
                       </button>
                       <button 
                         onClick={() => removeItem(item.id)} 
-                        className="remove-btn"
-                        title="Remove item"
                         disabled={loading}
                         style={{
-                          padding: '4px 8px',
-                          backgroundColor: '#f44336',
+                          padding: '8px 12px',
+                          backgroundColor: '#dc3545',
                           color: 'white',
                           border: 'none',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          cursor: 'pointer'
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          cursor: 'pointer',
+                          minHeight: '36px',
+                          fontWeight: '500'
                         }}
                       >
-                        ×
+                        Remove
                       </button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          )
-        })}
-        
-        {/* Show uncategorized items if any */}
-        {groupedItems['Uncategorized'] && groupedItems['Uncategorized'].length > 0 && (
-          <div className="category-section has-items" style={{
-            marginBottom: '24px',
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            padding: '16px'
-          }}>
-            <div className="category-header" style={{ marginBottom: '12px' }}>
-              <h3 className="category-title" style={{ margin: 0, fontSize: '18px' }}>Other Items</h3>
-              <span className="item-count" style={{ color: '#666', fontSize: '14px' }}>
-                ({groupedItems['Uncategorized'].length} items)
-              </span>
-            </div>
-            <div className="category-items">
-              {groupedItems['Uncategorized'].map((item) => (
-                <div key={item.id} className="item" style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '8px 0',
-                  borderBottom: '1px solid #eee',
-                  opacity: item.is_purchased ? 0.6 : 1
-                }}>
-                  <div className="item-info" style={{ flex: 1 }}>
-                    <span className="item-name" style={{
-                      fontWeight: 'bold',
-                      textDecoration: item.is_purchased ? 'line-through' : 'none'
-                    }}>
-                      {item.name}
-                    </span>
-                    <span className="item-details" style={{ 
-                      marginLeft: '8px', 
-                      color: '#666',
-                      fontSize: '14px'
-                    }}>
-                      {item.quantity} {item.unit}
-                      {item.estimated_cost > 0 && (
-                        <span style={{ marginLeft: '8px', color: '#4CAF50' }}>
-                          ${parseFloat(item.estimated_cost).toFixed(2)}
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button 
-                      onClick={() => togglePurchased(item.id, item.is_purchased)}
-                      style={{
-                        padding: '4px 8px',
-                        backgroundColor: item.is_purchased ? '#4CAF50' : '#2196F3',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        cursor: 'pointer'
-                      }}
-                      disabled={loading}
-                    >
-                      {item.is_purchased ? '✓' : 'Buy'}
-                    </button>
-                    <button 
-                      onClick={() => removeItem(item.id)} 
-                      className="remove-btn"
-                      title="Remove item"
-                      disabled={loading}
-                      style={{
-                        padding: '4px 8px',
-                        backgroundColor: '#f44336',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="add-item-section" style={{ marginTop: '32px', padding: '16px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-        <h3 style={{ marginTop: 0 }}>Add Manual Item</h3>
-        <div className="input-row" style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-          <input
-            type="text"
-            placeholder="Item name (e.g., chicken, apples)"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && addItem()}
-            className="item-input"
-            disabled={loading}
-            style={{ flex: 2, padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
-          />
-          <input
-            type="number"
-            placeholder="Qty"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && addItem()}
-            className="quantity-input"
-            min="0"
-            step="0.1"
-            disabled={loading}
-            style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
-          />
-          <select
-            value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-            className="unit-select"
-            disabled={loading}
-            style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
-          >
-            {units.map((unitOption) => (
-              <option key={unitOption} value={unitOption}>
-                {unitOption || 'unit'}
-              </option>
-            ))}
-          </select>
-          <button 
-            className="add-btn" 
-            onClick={addItem} 
-            disabled={loading || !input.trim()}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            {loading ? '...' : 'Add'}
-          </button>
+          )}
         </div>
-        {input.trim() && (
-          <div className="category-preview" style={{ fontSize: '14px', color: '#666' }}>
-            Will be added to: <strong>{categorizeItem(input)}</strong>
-            {quantity && (
-              <span className="quantity-preview">
-                • Quantity: {quantity} {unit || 'unit(s)'}
-              </span>
-            )}
+
+        {/* Add Manual Item Section */}
+        <div className="recipe-card mb-4">
+          <h3 className="mb-3">Add Manual Item</h3>
+          
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="Item name (e.g., chicken, apples)"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && addItem()}
+              disabled={loading}
+              style={{ flex: '2 1 200px', minWidth: '200px' }}
+            />
+            <input
+              type="number"
+              placeholder="Qty"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && addItem()}
+              min="0"
+              step="0.1"
+              disabled={loading}
+              style={{ flex: '0 1 80px', minWidth: '80px' }}
+            />
+            <select
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              disabled={loading}
+              style={{ flex: '0 1 100px', minWidth: '100px' }}
+            >
+              {units.map((unitOption) => (
+                <option key={unitOption} value={unitOption}>
+                  {unitOption || 'unit'}
+                </option>
+              ))}
+            </select>
+            <button 
+              onClick={addItem} 
+              disabled={loading || !input.trim()}
+              className="btn-primary"
+              style={{ flex: '0 1 120px', minWidth: '120px', margin: 0 }}
+            >
+              {loading ? 'Adding...' : 'Add Item'}
+            </button>
+          </div>
+          
+          {input.trim() && (
+            <div style={{ 
+              fontSize: '0.875rem', 
+              color: '#6c757d',
+              padding: '8px 12px',
+              backgroundColor: '#f8f9fa',
+              borderRadius: '6px',
+              border: '1px solid #e9ecef'
+            }}>
+              Will be added to: <strong style={{ color: '#007bff' }}>{categorizeItem(input)}</strong>
+              {quantity && (
+                <span style={{ marginLeft: '12px', color: '#28a745' }}>
+                  • Quantity: {quantity} {unit || 'unit(s)'}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        {unpurchasedItems > 0 && (
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <button 
+              disabled={unpurchasedItems === 0}
+              className="btn-warning"
+              style={{ flex: 1, minWidth: '200px' }}
+            >
+              🚗 Place DoorDash Order ({unpurchasedItems} items)
+            </button>
+            <button 
+              disabled={unpurchasedItems === 0}
+              className="btn-success"
+              style={{ flex: 1, minWidth: '200px' }}
+            >
+              🛒 Place Instacart Order ({unpurchasedItems} items)
+            </button>
           </div>
         )}
-      </div>
 
-      <div className="action-buttons" style={{ marginTop: '24px', display: 'flex', gap: '12px' }}>
-        <button 
-          className="secondary" 
-          disabled={unpurchasedItems === 0}
-          style={{
-            flex: 1,
-            padding: '12px',
-            backgroundColor: unpurchasedItems > 0 ? '#FF9800' : '#ccc',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: unpurchasedItems > 0 ? 'pointer' : 'not-allowed'
-          }}
-        >
-          Place DoorDash Order ({unpurchasedItems} items)
-        </button>
-        <button 
-          className="secondary" 
-          disabled={unpurchasedItems === 0}
-          style={{
-            flex: 1,
-            padding: '12px',
-            backgroundColor: unpurchasedItems > 0 ? '#4CAF50' : '#ccc',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: unpurchasedItems > 0 ? 'pointer' : 'not-allowed'
-          }}
-        >
-          Place Instacart Order ({unpurchasedItems} items)
-        </button>
+        {/* Empty State */}
+        {totalItems === 0 && !loading && (
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '60px 20px',
+            color: '#6c757d'
+          }}>
+            <div style={{ fontSize: '4rem', marginBottom: '16px' }}>🛒</div>
+            <h3 style={{ marginBottom: '8px' }}>Your grocery list is empty</h3>
+            <p style={{ marginBottom: '24px' }}>
+              Generate some recipes or add items manually to get started!
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => navigate('/generate')}
+                className="btn-primary"
+                style={{ width: 'auto', minWidth: '180px' }}
+              >
+                Generate Recipes
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
