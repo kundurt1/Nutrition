@@ -6,6 +6,8 @@ import GroceryList from './pages/GroceryList';
 import GenerateRecipe from './pages/GenerateRecipe';
 import Favorites from './pages/Favorites'; // Add this import
 import RequireAuth from './components/RequireAuth';
+import NutritionPage from './pages/NutritionPage';
+
 
 export default function AppRoutes() {
   return (

@@ -412,6 +412,36 @@ export default function HomePage() {
             <span style={{ fontSize: '1.5rem' }}>🛒</span>
             Grocery List
           </button>
+          <div 
+  onClick={() => navigate('/nutrition')}
+  style={{
+    padding: '24px',
+    border: '2px solid #10b981',
+    borderRadius: '12px',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    backgroundColor: '#fff',
+    textAlign: 'center'
+  }}
+  onMouseEnter={(e) => {
+    e.currentTarget.style.backgroundColor = '#ecfdf5';
+    e.currentTarget.style.transform = 'translateY(-2px)';
+    e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
+  }}
+  onMouseLeave={(e) => {
+    e.currentTarget.style.backgroundColor = '#fff';
+    e.currentTarget.style.transform = 'translateY(0)';
+    e.currentTarget.style.boxShadow = 'none';
+  }}
+>
+  <div style={{ fontSize: '48px', marginBottom: '16px' }}>🍎</div>
+  <h3 style={{ margin: '0 0 12px 0', color: '#047857', fontSize: '20px' }}>
+    Nutrition Tracker
+  </h3>
+  <p style={{ margin: 0, color: '#666', fontSize: '14px', lineHeight: '1.4' }}>
+    Track calories, macros, and costs from your generated recipes
+  </p>
+</div>
         </div>
       </div>
     </div>

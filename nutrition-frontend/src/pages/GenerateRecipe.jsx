@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import RecipeRatings from '../components/RecipeRatings';
+import { addRecipeToNutritionLog } from '../components/NutritionTracker';
+import { Utensils, CheckCircle } from 'lucide-react';
 
 export default function GenerateRecipe() {
   const navigate = useNavigate();
@@ -17,7 +19,7 @@ export default function GenerateRecipe() {
   const [regeneratingIndex, setRegeneratingIndex] = useState(null);
   const [savingToGroceryList, setSavingToGroceryList] = useState(false);
 
-  // Meal Planning State (this was missing!)
+  // Meal Planning State 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState('week');
   const [plannedMeals, setPlannedMeals] = useState({});
@@ -27,6 +29,8 @@ export default function GenerateRecipe() {
   const [totalBudget, setTotalBudget] = useState(0);
   const [totalPrepTime, setTotalPrepTime] = useState(0);
   const [mealPlanLoading, setMealPlanLoading] = useState(false);
+
+  const [addingToNutrition, setAddingToNutrition] = useState({});
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -170,6 +174,43 @@ export default function GenerateRecipe() {
     }
   };
 
+  const handleDoubleClickAddToNutrition = async (recipe, recipeIndex) => {
+  if (!userId) {
+    alert('Please sign in to track nutrition');
+    return;
+  }
+
+  setAddingToNutrition(prev => ({ ...prev, [recipeIndex]: true }));
+
+  try {
+    const result = await addRecipeToNutritionLog(userId, recipe);
+    
+    if (result.success) {
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center';
+      notification.innerHTML = `
+        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+        </svg>
+        Added to nutrition log!
+      `;
+      document.body.appendChild(notification);
+      
+      // Remove notification after 3 seconds
+      setTimeout(() => {
+        document.body.removeChild(notification);
+      }, 3000);
+    } else {
+      alert('Failed to add to nutrition log: ' + (result.error || 'Unknown error'));
+    }
+  } catch (error) {
+    console.error('Error adding to nutrition log:', error);
+    alert('Error adding to nutrition log');
+  } finally {
+    setAddingToNutrition(prev => ({ ...prev, [recipeIndex]: false }));
+  }
+};
   const handleSaveToGroceryList = async () => {
     if (!recipeResults || !userId) return;
     
@@ -548,120 +589,142 @@ export default function GenerateRecipe() {
   const weekDates = getWeekDates();
 
   const renderRecipe = (rec, idx) => {
-    const recipeName = rec.recipe_name || rec.recipe_text?.split('\n')[0] || `Recipe ${idx + 1}`;
-    const ingredients = rec.ingredients || [];
-    const directions = rec.directions || [];
-    const macros = rec.macros || {};
-    const tags = rec.tags || [];
-    
-    return (
-      <div key={idx} className="recipe-card">
-        <div className="recipe-header">
-          <div>
-            <h3 className="recipe-title">
-              {recipeName}
-            </h3>
-            <div style={{ 
-              display: 'flex', 
-              gap: '16px', 
-              marginTop: '8px',
-              fontSize: '0.875rem',
-              color: '#6c757d'
-            }}>
-              <span><strong>Cuisine:</strong> {rec.cuisine || 'Not specified'}</span>
-              <span><strong>Cost:</strong> ${typeof rec.cost_estimate === 'number' ? rec.cost_estimate.toFixed(2) : '0.00'}</span>
-            </div>
-          </div>
-          
-          <div className="recipe-actions">
+  const recipeName = rec.recipe_name || rec.recipe_text?.split('\n')[0] || `Recipe ${idx + 1}`;
+  const ingredients = rec.ingredients || [];
+  const directions = rec.directions || [];
+  const macros = rec.macros || {};
+  const tags = rec.tags || [];
+  
+  return (
+    <div 
+      key={idx} 
+      className="mb-8 border border-gray-200 rounded-lg overflow-hidden shadow-sm cursor-pointer"
+      onDoubleClick={() => handleDoubleClickAddToNutrition(rec, idx)}
+      title="Double-click to add to nutrition log"
+    >
+      {/* Recipe Header */}
+      <div className="bg-gradient-to-r from-blue-50 to-green-50 p-4 border-b border-gray-200">
+        <div className="flex justify-between items-start mb-3">
+          <h3 className="text-xl font-bold text-gray-900">Recipe {idx + 1}: {recipeName}</h3>
+          <div className="flex gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDoubleClickAddToNutrition(rec, idx);
+              }}
+              disabled={addingToNutrition[idx]}
+              className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50 flex items-center"
+            >
+              {addingToNutrition[idx] ? (
+                <>
+                  <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <Utensils className="w-4 h-4 mr-2" />
+                  Log Nutrition
+                </>
+              )}
+            </button>
             <button
               onClick={() => addMealToDate(new Date(), rec)}
-              className="btn-primary btn-sm"
-              style={{ marginRight: '8px' }}
+              className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
             >
               Add to Meal Plan
             </button>
             <button
               onClick={() => handleRegenerateRecipe(idx)}
               disabled={regeneratingIndex === idx || loading}
-              className="btn-danger btn-sm"
+              className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 disabled:opacity-50"
             >
               {regeneratingIndex === idx ? 'Regenerating...' : 'Regenerate'}
             </button>
           </div>
         </div>
+        
+        {/* Nutrition Summary Card */}
+        <div className="bg-white rounded-lg p-4 shadow-sm">
+          <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
+            <Utensils className="w-4 h-4 mr-2 text-green-600" />
+            Nutrition & Cost Summary
+          </h4>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+            <div className="bg-blue-50 rounded-lg p-3">
+              <div className="text-2xl font-bold text-blue-600">{macros.calories || 'N/A'}</div>
+              <div className="text-sm text-blue-800">Calories</div>
+            </div>
+            <div className="bg-red-50 rounded-lg p-3">
+              <div className="text-2xl font-bold text-red-600">{String(macros.protein || '0').replace('g', '')}g</div>
+              <div className="text-sm text-red-800">Protein</div>
+            </div>
+            <div className="bg-yellow-50 rounded-lg p-3">
+              <div className="text-2xl font-bold text-yellow-600">{String(macros.carbs || '0').replace('g', '')}g</div>
+              <div className="text-sm text-yellow-800">Carbs</div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-3">
+              <div className="text-2xl font-bold text-purple-600">{String(macros.fat || '0').replace('g', '')}g</div>
+              <div className="text-sm text-purple-800">Fat</div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-3">
+              <div className="text-2xl font-bold text-green-600">${typeof rec.cost_estimate === 'number' ? rec.cost_estimate.toFixed(2) : '0.00'}</div>
+              <div className="text-sm text-green-800">Cost</div>
+            </div>
+          </div>
+        </div>
 
-        {/* Ingredients Section */}
+        {/* Double-click hint */}
+        <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center">
+          <CheckCircle className="w-5 h-5 text-green-600 mr-3" />
+          <div className="text-sm text-green-800">
+            <strong>Quick Tip:</strong> Double-click anywhere on this recipe card to automatically log it to your nutrition tracker!
+          </div>
+        </div>
+      </div>
+
+      {/* Rest of your existing recipe rendering code for ingredients, directions, etc. */}
+      <div className="p-4">
+        {/* Your existing ingredients and directions rendering */}
         {ingredients.length > 0 && (
-          <div className="recipe-section">
-            <h4>Ingredients</h4>
-            <ul className="ingredients-list">
+          <div className="mb-4">
+            <h4 className="text-lg font-semibold text-gray-900 mb-3">Ingredients</h4>
+            <ul className="space-y-2">
               {ingredients.map((ing, i) => (
-                <li key={i}>
-                  <strong>{ing.quantity || ''} {ing.unit || ''}</strong> {ing.name || 'Unknown ingredient'}
+                <li key={i} className="flex items-center text-gray-700">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                  {ing.quantity || ''} {ing.unit || ''} {ing.name || 'Unknown ingredient'}
                 </li>
               ))}
             </ul>
           </div>
         )}
 
-        {/* Directions Section */}
         {directions.length > 0 && (
-          <div className="recipe-section">
-            <h4>Directions</h4>
-            <ol className="directions-list">
+          <div className="mb-4">
+            <h4 className="text-lg font-semibold text-gray-900 mb-3">Directions</h4>
+            <ol className="space-y-3">
               {directions.map((step, i) => (
-                <li key={i}>{step}</li>
+                <li key={i} className="flex text-gray-700">
+                  <span className="flex-shrink-0 w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-semibold mr-3 mt-0.5">
+                    {i + 1}
+                  </span>
+                  <span>{step}</span>
+                </li>
               ))}
             </ol>
           </div>
         )}
 
-        {/* Nutrition Section */}
-        <div className="recipe-section">
-          <h4>Nutrition Facts</h4>
-          <div className="nutrition-grid">
-            <div className="nutrition-item">
-              <span className="nutrition-value">{macros.calories || 'N/A'}</span>
-              <span className="nutrition-label">Calories</span>
-            </div>
-            <div className="nutrition-item">
-              <span className="nutrition-value">{macros.protein || 'N/A'}</span>
-              <span className="nutrition-label">Protein</span>
-            </div>
-            <div className="nutrition-item">
-              <span className="nutrition-value">{macros.carbs || 'N/A'}</span>
-              <span className="nutrition-label">Carbs</span>
-            </div>
-            <div className="nutrition-item">
-              <span className="nutrition-value">{macros.fat || 'N/A'}</span>
-              <span className="nutrition-label">Fat</span>
-            </div>
-            <div className="nutrition-item">
-              <span className="nutrition-value">{macros.fiber || 'N/A'}</span>
-              <span className="nutrition-label">Fiber</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Tags */}
-        {tags.length > 0 && (
-          <div className="tags-container">
-            {tags.map((tag, i) => (
-              <span key={i} className="tag">{tag}</span>
-            ))}
-          </div>
-        )}
-
-        {/* Recipe Rating Component */}
+        {/*RecipeRatings component */}
         <RecipeRatings 
           recipeData={rec}
           userId={userId}
           onRatingSubmit={(rating, feedback) => console.log(`Recipe rated ${rating} stars`, feedback)}
         />
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   return (
     <div className="app-container">
