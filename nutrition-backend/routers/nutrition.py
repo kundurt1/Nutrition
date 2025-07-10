@@ -2,21 +2,433 @@ from fastapi import APIRouter, HTTPException, Query
 from models.userModels import LogMealRequest, CustomEntryRequest
 from database import supabase
 from datetime import datetime, timedelta, date
-from typing import Optional
+from typing import Optional, Dict, Any
+import json
 
 router = APIRouter()
 
-@router.post("/log-meal")
-def log_meal(req: LogMealRequest):
-    """Log a meal - used by meal tracking functionality"""
+@router.post("/quick-log-recipe")
+def quick_log_recipe(req: Dict[str, Any]):
+    """Quick recipe logging for double-click feature in GenerateRecipe component"""
     try:
         if not supabase:
             raise HTTPException(status_code=500, detail="Database not available")
 
-        # Use provided date or fallback to today's date
+        user_id = req.get("user_id")
+        recipe_data = req.get("recipe_data", {})
+
+        if not user_id or not recipe_data:
+            raise HTTPException(status_code=400, detail="User ID and recipe data are required")
+
+        # Use the existing log_meal_enhanced function
+        result = log_meal_enhanced({
+            "user_id": user_id,
+            "recipe_data": recipe_data,
+            "date": str(date.today())
+        })
+
+        print(f"✅ Quick logged recipe via double-click for user {user_id}")
+
+        return {
+            "success": True,
+            "message": f"Recipe '{recipe_data.get('recipe_name', 'Recipe')}' added to nutrition log!",
+            "nutrition_data": result.get("nutrition_summary", {}),
+            "log_id": result.get("log_id")
+        }
+
+    except Exception as e:
+        print(f"❌ Error in quick_log_recipe: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to quick log recipe: {str(e)}")
+
+@router.post("/log-meal")
+def log_meal_enhanced(req: Dict[str, Any]):
+    """Enhanced meal logging that handles complete recipe data"""
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Database not available")
+
+        user_id = req.get("user_id")
+        recipe_data = req.get("recipe_data", {})
+        log_date = req.get("date", str(date.today()))
+
+        if not user_id:
+            raise HTTPException(status_code=400, detail="User ID is required")
+
+        # Extract nutrition information
+        macros = recipe_data.get('macros', {})
+
+        def parse_macro_value(value):
+            """Parse macro values that might be strings like '25g' or numbers"""
+            if isinstance(value, str):
+                numeric_str = ''.join(filter(lambda x: x.isdigit() or x == '.', str(value)))
+                return float(numeric_str) if numeric_str else 0.0
+            return float(value) if value else 0.0
+
+        calories = float(macros.get('calories', 0)) if macros.get('calories') else 0.0
+        protein = parse_macro_value(macros.get('protein', 0))
+        carbs = parse_macro_value(macros.get('carbs', 0))
+        fat = parse_macro_value(macros.get('fat', 0))
+        fiber = parse_macro_value(macros.get('fiber', 0))
+        cost = float(recipe_data.get('cost_estimate', 0)) if recipe_data.get('cost_estimate') else 0.0
+
+        # Create nutrition log entry
+        nutrition_entry = {
+            "user_id": user_id,
+            "recipe_name": recipe_data.get('recipe_name', 'Generated Recipe'),
+            "recipe_data": recipe_data,
+            "date": log_date,
+            "calories": calories,
+            "protein": protein,
+            "carbs": carbs,
+            "fat": fat,
+            "fiber": fiber,
+            "cost": cost,
+            "cuisine": recipe_data.get('cuisine', 'Unknown'),
+            "logged_at": datetime.now().isoformat()
+        }
+
+        # Insert into nutrition_logs table
+        insert_result = supabase.table("nutrition_logs").insert(nutrition_entry).execute()
+
+        if insert_result.data and len(insert_result.data) > 0:
+            print(f"✅ Logged recipe '{recipe_data.get('recipe_name')}' for user {user_id}")
+
+            return {
+                "success": True,
+                "message": "Recipe successfully logged to nutrition tracker",
+                "log_id": insert_result.data[0]["id"],
+                "nutrition_summary": {
+                    "calories": calories,
+                    "protein": f"{protein}g",
+                    "cost": f"${cost:.2f}"
+                }
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to log nutrition data")
+
+    except Exception as e:
+        print(f"❌ Error logging recipe nutrition: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to log meal: {str(e)}")
+
+@router.post("/custom-entry")
+def custom_entry(req: CustomEntryRequest):
+    """Log custom food entry - used by nutrition tracking"""
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Database not available")
+
         log_date = req.date if req.date else str(date.today())
 
-        # Insert the meal log into Supabase
+        entry_data = {
+            "user_id": req.user_id,
+            "food_name": req.food_name,
+            "calories": req.calories,
+            "protein": req.protein,
+            "carbs": req.carbs,
+            "fat": req.fat,
+            "fiber": req.fiber,
+            "date": log_date,
+            "logged_at": datetime.now().isoformat()
+        }
+
+        insert_result = supabase.table("manual_logs").insert(entry_data).execute()
+
+        if insert_result.data and len(insert_result.data) > 0:
+            print(f"✅ Logged custom entry '{req.food_name}' for user {req.user_id}")
+
+            return {
+                "success": True,
+                "status": "manual entry logged",
+                "entry": {
+                    "id": insert_result.data[0]["id"],
+                    "food_name": req.food_name,
+                    "calories": req.calories,
+                    "date": log_date
+                }
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to log custom entry")
+
+    except Exception as e:
+        print(f"❌ Error in custom_entry: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to log custom entry: {str(e)}")
+
+@router.get("/daily-nutrition")
+def get_daily_nutrition(user_id: str = Query(...), date: str = Query(...)):
+    """Get all nutrition entries for a specific user and date - matches frontend expectations"""
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Database not available")
+
+        print(f"Getting daily nutrition for user {user_id} on {date}")
+
+        # Fetch nutrition logs (recipe-based entries)
+        nutrition_logs_result = supabase.table("nutrition_logs") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .eq("date", date) \
+            .order("logged_at", desc=True) \
+            .execute()
+
+        # Fetch manual entries
+        manual_logs_result = supabase.table("manual_logs") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .eq("date", date) \
+            .order("logged_at", desc=True) \
+            .execute()
+
+        # Combine and format all entries exactly as frontend expects
+        logs = []
+
+        # Process nutrition logs (from recipes)
+        for log in (nutrition_logs_result.data or []):
+            logs.append({
+                "id": log["id"],
+                "type": "meal",
+                "recipe_data": log.get("recipe_data", {}),
+                "logged_at": log.get("logged_at"),
+                "date": log["date"]
+            })
+
+        # Process manual logs
+        for log in (manual_logs_result.data or []):
+            logs.append({
+                "id": log["id"],
+                "type": "custom",
+                "food_name": log["food_name"],
+                "calories": log["calories"],
+                "protein": log["protein"],
+                "carbs": log["carbs"],
+                "fat": log["fat"],
+                "fiber": log.get("fiber", 0),
+                "logged_at": log.get("logged_at"),
+                "date": log["date"]
+            })
+
+        # Sort by logged_at timestamp
+        logs.sort(key=lambda x: x.get("logged_at", ""), reverse=True)
+
+        print(f"✅ Retrieved {len(logs)} nutrition entries for {date}")
+
+        return {
+            "logs": logs,
+            "date": date,
+            "total_entries": len(logs)
+        }
+
+    except Exception as e:
+        print(f"❌ Error getting daily nutrition: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get daily nutrition: {str(e)}")
+
+@router.get("/weekly-nutrition-summary/{user_id}")
+def get_weekly_nutrition_summary(user_id: str, days: int = Query(7)):
+    """Get nutrition summary for the past week - matches frontend expectations"""
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Database not available")
+
+        end_date = date.today()
+        start_date = end_date - timedelta(days=days - 1)
+
+        print(f"Getting weekly nutrition summary for user {user_id} from {start_date} to {end_date}")
+
+        # Get nutrition logs
+        nutrition_logs = supabase.table("nutrition_logs") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .gte("date", str(start_date)) \
+            .lte("date", str(end_date)) \
+            .execute()
+
+        # Get manual logs
+        manual_logs = supabase.table("manual_logs") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .gte("date", str(start_date)) \
+            .lte("date", str(end_date)) \
+            .execute()
+
+        # Calculate totals
+        total_calories = 0
+        total_protein = 0
+        total_carbs = 0
+        total_fat = 0
+        total_fiber = 0
+        total_cost = 0
+        total_entries = 0
+
+        # Add nutrition logs
+        for log in (nutrition_logs.data or []):
+            total_calories += log.get("calories", 0)
+            total_protein += log.get("protein", 0)
+            total_carbs += log.get("carbs", 0)
+            total_fat += log.get("fat", 0)
+            total_fiber += log.get("fiber", 0)
+            total_cost += log.get("cost", 0)
+            total_entries += 1
+
+        # Add manual logs
+        for log in (manual_logs.data or []):
+            total_calories += log.get("calories", 0)
+            total_protein += log.get("protein", 0)
+            total_carbs += log.get("carbs", 0)
+            total_fat += log.get("fat", 0)
+            total_fiber += log.get("fiber", 0)
+            total_entries += 1
+
+        # Calculate averages
+        avg_calories = total_calories / days if days > 0 else 0
+        avg_protein = total_protein / days if days > 0 else 0
+        avg_carbs = total_carbs / days if days > 0 else 0
+        avg_fat = total_fat / days if days > 0 else 0
+        avg_cost = total_cost / days if days > 0 else 0
+
+        print(f"✅ Generated weekly nutrition summary for user {user_id}")
+
+        # Format response to match frontend expectations
+        return {
+            "weekly_summary": {
+                "daily_averages": {
+                    "calories": round(avg_calories, 1),
+                    "protein": round(avg_protein, 1),
+                    "carbs": round(avg_carbs, 1),
+                    "fat": round(avg_fat, 1),
+                    "cost": round(avg_cost, 2)
+                },
+                "entries_logged": total_entries,
+                "goal_compliance": {
+                    "calories": round((avg_calories / 2000) * 100, 1),  # Assuming 2000 cal goal
+                    "protein": round((avg_protein / 150) * 100, 1),  # Assuming 150g goal
+                }
+            }
+        }
+
+    except Exception as e:
+        print(f"❌ Error getting weekly nutrition summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get weekly summary: {str(e)}")
+
+@router.get("/nutrition-dashboard/{user_id}")
+def get_nutrition_dashboard(user_id: str, days: int = Query(7)):
+    """Get comprehensive nutrition dashboard data - matches frontend expectations"""
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Database not available")
+
+        today = date.today()
+
+        # Get today's nutrition
+        today_data = get_daily_nutrition(user_id, str(today))
+
+        # Get weekly summary
+        weekly_data = get_weekly_nutrition_summary(user_id, days)
+
+        # Calculate today's totals for the dashboard
+        today_totals = {
+            "calories": 0,
+            "protein": 0,
+            "carbs": 0,
+            "fat": 0,
+            "fiber": 0,
+            "cost": 0
+        }
+
+        for log in today_data.get("logs", []):
+            if log["type"] == "meal" and log.get("recipe_data"):
+                macros = log["recipe_data"].get("macros", {})
+                today_totals["calories"] += float(macros.get("calories", 0))
+                today_totals["protein"] += float(str(macros.get("protein", "0")).replace("g", ""))
+                today_totals["carbs"] += float(str(macros.get("carbs", "0")).replace("g", ""))
+                today_totals["fat"] += float(str(macros.get("fat", "0")).replace("g", ""))
+                today_totals["fiber"] += float(str(macros.get("fiber", "0")).replace("g", ""))
+                today_totals["cost"] += float(log["recipe_data"].get("cost_estimate", 0))
+            elif log["type"] == "custom":
+                today_totals["calories"] += log.get("calories", 0)
+                today_totals["protein"] += log.get("protein", 0)
+                today_totals["carbs"] += log.get("carbs", 0)
+                today_totals["fat"] += log.get("fat", 0)
+                today_totals["fiber"] += log.get("fiber", 0)
+
+        print(f"✅ Generated nutrition dashboard for user {user_id}")
+
+        return {
+            "dashboard": {
+                "today": today_totals,
+                "weekly": weekly_data.get("weekly_summary", {}),
+                "insights": {
+                    "logging_streak": 1,  # Calculate this based on consecutive days
+                    "total_meals_logged": len(today_data.get("logs", [])),
+                    "favorite_cuisines": [],  # Add cuisine analysis
+                    "days_tracked": days
+                }
+            }
+        }
+
+    except Exception as e:
+        print(f"❌ Error getting nutrition dashboard: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get nutrition dashboard: {str(e)}")
+
+@router.delete("/nutrition-entry/{log_id}")
+def delete_nutrition_entry(log_id: int, user_id: str = Query(...), entry_type: str = Query(...)):
+    """Delete a nutrition log entry (meal or custom) - matches frontend expectations"""
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Database not available")
+
+        table_name = "nutrition_logs" if entry_type == "meal" else "manual_logs"
+
+        result = supabase.table(table_name) \
+            .delete() \
+            .eq("id", log_id) \
+            .eq("user_id", user_id) \
+            .execute()
+
+        print(f"✅ Deleted {entry_type} entry {log_id} for user {user_id}")
+
+        return {
+            "success": True,
+            "message": f"{entry_type.title()} entry deleted successfully"
+        }
+
+    except Exception as e:
+        print(f"❌ Error deleting nutrition entry: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete entry: {str(e)}")
+
+@router.delete("/custom-entry/{entry_id}")
+def delete_custom_entry(entry_id: int, user_id: str = Query(...), entry_type: str = Query(...)):
+    """Delete a custom entry - matches frontend expectations"""
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Database not available")
+
+        result = supabase.table("manual_logs") \
+            .delete() \
+            .eq("id", entry_id) \
+            .eq("user_id", user_id) \
+            .execute()
+
+        print(f"✅ Deleted custom entry {entry_id} for user {user_id}")
+
+        return {
+            "success": True,
+            "message": "Custom entry deleted successfully"
+        }
+
+    except Exception as e:
+        print(f"❌ Error deleting custom entry: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete entry: {str(e)}")
+
+# Additional endpoints for compatibility with existing meal logging system
+
+@router.post("/log-meal-simple")
+def log_meal_simple(req: LogMealRequest):
+    """Simple meal logging with recipe ID for existing recipes"""
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Database not available")
+
+        log_date = req.date if req.date else str(date.today())
+
         meal_log_data = {
             "user_id": req.user_id,
             "recipe_id": req.recipe_id,
@@ -28,7 +440,7 @@ def log_meal(req: LogMealRequest):
 
         if insert_result.data and len(insert_result.data) > 0:
             print(f"✅ Logged meal for user {req.user_id} on {log_date}")
-            
+
             return {
                 "success": True,
                 "status": "meal logged",
@@ -39,7 +451,7 @@ def log_meal(req: LogMealRequest):
             raise HTTPException(status_code=500, detail="Failed to log meal")
 
     except Exception as e:
-        print(f"❌ Error in log_meal: {str(e)}")
+        print(f"❌ Error in log_meal_simple: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to log meal: {str(e)}")
 
 @router.get("/meal-log")
@@ -107,108 +519,89 @@ def get_nutrition_summary(user_id: str = Query(...)):
         week_ago = today - timedelta(days=7)
         month_ago = today - timedelta(days=30)
 
-        # Fetch meal logs with recipe data for the past month
-        logs = supabase.table("meal_logs") \
-            .select("*, recipes!inner(macro_estimate, cuisine, title)") \
+        # Fetch nutrition logs for the past month
+        nutrition_logs = supabase.table("nutrition_logs") \
+            .select("*") \
             .eq("user_id", user_id) \
             .gte("date", str(month_ago)) \
             .lte("date", str(today)) \
             .execute()
 
-        meal_logs = logs.data or []
+        # Fetch manual logs
+        manual_logs = supabase.table("manual_logs") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .gte("date", str(month_ago)) \
+            .lte("date", str(today)) \
+            .execute()
 
         # Calculate nutrition metrics
-        today_meals = [log for log in meal_logs if log["date"] == str(today)]
-        week_meals = [log for log in meal_logs if log["date"] >= str(week_ago)]
+        today_nutrition = 0
+        week_nutrition = 0
+        today_logs = []
+        week_logs = []
 
-        # Calculate calories
-        total_calories_today = sum(
-            log["recipes"]["macro_estimate"].get("calories", 0) 
-            for log in today_meals 
-            if log["recipes"] and log["recipes"]["macro_estimate"]
-        )
+        # Process nutrition logs
+        for log in (nutrition_logs.data or []):
+            log_date = datetime.strptime(log["date"], "%Y-%m-%d").date()
+            calories = log.get("calories", 0)
 
-        total_calories_week = sum(
-            log["recipes"]["macro_estimate"].get("calories", 0) 
-            for log in week_meals 
-            if log["recipes"] and log["recipes"]["macro_estimate"]
-        )
+            if log_date == today:
+                today_nutrition += calories
+                today_logs.append(log)
+            if log_date >= week_ago:
+                week_nutrition += calories
+                week_logs.append(log)
 
-        avg_calories_per_day = round(total_calories_week / 7) if week_meals else 0
+        # Process manual logs
+        for log in (manual_logs.data or []):
+            log_date = datetime.strptime(log["date"], "%Y-%m-%d").date()
+            calories = log.get("calories", 0)
 
-        # Calculate macro breakdown for the week
-        nutrition_breakdown = {"protein": 0, "carbs": 0, "fat": 0, "fiber": 0}
-        
-        for log in week_meals:
-            if log["recipes"] and log["recipes"]["macro_estimate"]:
-                macros = log["recipes"]["macro_estimate"]
-                for key in nutrition_breakdown.keys():
-                    value = macros.get(key, "0g")
-                    # Extract numeric value from string like "25g"
-                    if isinstance(value, str):
-                        numeric_value = float(''.join(filter(str.isdigit, value))) if any(c.isdigit() for c in value) else 0
-                    else:
-                        numeric_value = float(value) if value else 0
-                    nutrition_breakdown[key] += numeric_value
+            if log_date == today:
+                today_nutrition += calories
+                today_logs.append(log)
+            if log_date >= week_ago:
+                week_nutrition += calories
+                week_logs.append(log)
 
-        # Round the nutrition values
-        for key in nutrition_breakdown:
-            nutrition_breakdown[key] = round(nutrition_breakdown[key])
+        avg_calories_per_day = week_nutrition / 7 if week_logs else 0
 
-        # Find favorite cuisines
+        # Find favorite cuisines from nutrition logs
         cuisine_count = {}
-        for log in meal_logs:
-            if log["recipes"] and log["recipes"]["cuisine"]:
-                cuisine = log["recipes"]["cuisine"]
-                cuisine_count[cuisine] = cuisine_count.get(cuisine, 0) + 1
+        for log in (nutrition_logs.data or []):
+            cuisine = log.get("cuisine", "Unknown")
+            cuisine_count[cuisine] = cuisine_count.get(cuisine, 0) + 1
 
         favorite_cuisines = [
             {"cuisine": cuisine, "count": count}
             for cuisine, count in sorted(cuisine_count.items(), key=lambda x: x[1], reverse=True)[:3]
         ]
 
-        # Find favorite meals (most logged recipes)
-        meal_count = {}
-        for log in meal_logs:
-            if log["recipes"] and log["recipes"]["title"]:
-                title = log["recipes"]["title"]
-                meal_count[title] = meal_count.get(title, 0) + 1
-
-        favorite_meals = [
-            {"title": title, "count": count}
-            for title, count in sorted(meal_count.items(), key=lambda x: x[1], reverse=True)[:3]
-        ]
-
-        # Fetch custom entries for today
-        custom_entries = supabase.table("manual_logs") \
-            .select("*") \
-            .eq("user_id", user_id) \
-            .eq("date", str(today)) \
-            .execute()
-
-        custom_calories_today = sum(
-            entry.get("calories", 0) for entry in (custom_entries.data or [])
-        )
-
         print(f"✅ Generated nutrition summary for user {user_id}")
 
         return {
             "summary": {
                 "today": {
-                    "total_calories": round(total_calories_today + custom_calories_today),
-                    "meals_logged": len(today_meals),
-                    "custom_entries": len(custom_entries.data or [])
+                    "total_calories": round(today_nutrition),
+                    "meals_logged": len(today_logs),
+                    "custom_entries": len([log for log in today_logs if "food_name" in log])
                 },
                 "week": {
-                    "total_calories": round(total_calories_week),
-                    "avg_calories_per_day": avg_calories_per_day,
-                    "meals_logged": len(week_meals),
-                    "nutrition_breakdown": nutrition_breakdown
+                    "total_calories": round(week_nutrition),
+                    "avg_calories_per_day": round(avg_calories_per_day),
+                    "meals_logged": len(week_logs),
+                    "nutrition_breakdown": {
+                        "protein": 0,  # Calculate from logs if needed
+                        "carbs": 0,
+                        "fat": 0,
+                        "fiber": 0
+                    }
                 },
                 "insights": {
                     "favorite_cuisines": favorite_cuisines,
-                    "favorite_meals": favorite_meals,
-                    "total_meals_month": len(meal_logs)
+                    "favorite_meals": [],  # Add if needed
+                    "total_meals_month": len(nutrition_logs.data or []) + len(manual_logs.data or [])
                 }
             }
         }
@@ -216,49 +609,6 @@ def get_nutrition_summary(user_id: str = Query(...)):
     except Exception as e:
         print(f"❌ Error in get_nutrition_summary: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get nutrition summary: {str(e)}")
-
-@router.post("/custom-entry")
-def custom_entry(req: CustomEntryRequest):
-    """Log custom food entry - used by nutrition tracking"""
-    try:
-        if not supabase:
-            raise HTTPException(status_code=500, detail="Database not available")
-
-        log_date = req.date if req.date else str(date.today())
-
-        entry_data = {
-            "user_id": req.user_id,
-            "food_name": req.food_name,
-            "calories": req.calories,
-            "protein": req.protein,
-            "carbs": req.carbs,
-            "fat": req.fat,
-            "fiber": req.fiber,
-            "date": log_date,
-            "created_at": datetime.now().isoformat()
-        }
-
-        insert_result = supabase.table("manual_logs").insert(entry_data).execute()
-
-        if insert_result.data and len(insert_result.data) > 0:
-            print(f"✅ Logged custom entry '{req.food_name}' for user {req.user_id}")
-            
-            return {
-                "success": True,
-                "status": "manual entry logged",
-                "entry": {
-                    "id": insert_result.data[0]["id"],
-                    "food_name": req.food_name,
-                    "calories": req.calories,
-                    "date": log_date
-                }
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Failed to log custom entry")
-
-    except Exception as e:
-        print(f"❌ Error in custom_entry: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to log custom entry: {str(e)}")
 
 @router.get("/custom-entries")
 def get_custom_entries(user_id: str = Query(...), days: int = Query(7)):
@@ -277,7 +627,7 @@ def get_custom_entries(user_id: str = Query(...), days: int = Query(7)):
             .eq("user_id", user_id) \
             .gte("date", str(start_date)) \
             .lte("date", str(end_date)) \
-            .order("date", desc=True) \
+            .order("logged_at", desc=True) \
             .execute()
 
         custom_entries = entries.data or []
@@ -292,252 +642,3 @@ def get_custom_entries(user_id: str = Query(...), days: int = Query(7)):
     except Exception as e:
         print(f"❌ Error in get_custom_entries: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get custom entries: {str(e)}")
-
-@router.delete("/meal-log/{meal_log_id}")
-def delete_meal_log(meal_log_id: int, user_id: str = Query(...)):
-    """Delete a meal log entry"""
-    try:
-        if not supabase:
-            raise HTTPException(status_code=500, detail="Database not available")
-
-        result = supabase.table("meal_logs") \
-            .delete() \
-            .eq("id", meal_log_id) \
-            .eq("user_id", user_id) \
-            .execute()
-
-        print(f"✅ Deleted meal log {meal_log_id} for user {user_id}")
-
-        return {
-            "success": True,
-            "message": "Meal log deleted successfully"
-        }
-
-    except Exception as e:
-        print(f"❌ Error in delete_meal_log: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete meal log: {str(e)}")
-
-@router.delete("/custom-entry/{entry_id}")
-def delete_custom_entry(entry_id: int, user_id: str = Query(...)):
-    """Delete a custom food entry"""
-    try:
-        if not supabase:
-            raise HTTPException(status_code=500, detail="Database not available")
-
-        result = supabase.table("manual_logs") \
-            .delete() \
-            .eq("id", entry_id) \
-            .eq("user_id", user_id) \
-            .execute()
-
-        print(f"✅ Deleted custom entry {entry_id} for user {user_id}")
-
-        return {
-            "success": True,
-            "message": "Custom entry deleted successfully"
-        }
-
-    except Exception as e:
-        print(f"❌ Error in delete_custom_entry: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete custom entry: {str(e)}")
-
-# Additional endpoint for dashboard stats
-@router.get("/dashboard-stats/{user_id}")
-def get_dashboard_stats(user_id: str):
-    """Get comprehensive dashboard statistics for HomePage.jsx"""
-    try:
-        if not supabase:
-            raise HTTPException(status_code=500, detail="Database not available")
-
-        # Get recipe count
-        recipes_result = supabase.table("recipes") \
-            .select("id", count="exact") \
-            .eq("user_id", user_id) \
-            .execute()
-
-        total_recipes = recipes_result.count if hasattr(recipes_result, 'count') else 0
-
-        # Get grocery items count (unpurchased)
-        grocery_result = supabase.table("grocery_items") \
-            .select("id", count="exact") \
-            .eq("user_id", user_id) \
-            .eq("is_purchased", False) \
-            .execute()
-
-        total_grocery_items = grocery_result.count if hasattr(grocery_result, 'count') else 0
-
-        # Get favorites count
-        favorites_result = supabase.table("favorites") \
-            .select("id", count="exact") \
-            .eq("user_id", user_id) \
-            .execute()
-
-        total_favorites = favorites_result.count if hasattr(favorites_result, 'count') else 0
-
-        # Get recent favorites
-        recent_favorites = supabase.table("favorites") \
-            .select("*") \
-            .eq("user_id", user_id) \
-            .order("favorited_at", desc=True) \
-            .limit(5) \
-            .execute()
-
-        # Get today's calories from nutrition summary
-        nutrition_summary = get_nutrition_summary(user_id)
-        today_calories = nutrition_summary["summary"]["today"]["total_calories"]
-
-        print(f"✅ Generated dashboard stats for user {user_id}")
-
-        return {
-            "stats": {
-                "total_recipes": total_recipes,
-                "total_grocery_items": total_grocery_items,
-                "total_favorites": total_favorites,
-                "today_calories": today_calories
-            },
-            "recent_favorites": recent_favorites.data or [],
-            "nutrition_insights": nutrition_summary["summary"]
-        }
-
-    except Exception as e:
-        print(f"❌ Error in get_dashboard_stats: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get dashboard stats: {str(e)}")
-    
-@router.post("/log-meal")
-def log_meal_enhanced(req: dict):
-    """Enhanced meal logging that handles complete recipe data"""
-    try:
-        if not supabase:
-            raise HTTPException(status_code=500, detail="Database not available")
-
-        user_id = req.get("user_id")
-        recipe_data = req.get("recipe_data", {})
-        log_date = req.get("date", str(date.today()))
-
-        # Extract nutrition information
-        macros = recipe_data.get('macros', {})
-        
-        def parse_macro_value(value):
-            if isinstance(value, str):
-                numeric_str = ''.join(filter(lambda x: x.isdigit() or x == '.', str(value)))
-                return float(numeric_str) if numeric_str else 0.0
-            return float(value) if value else 0.0
-
-        calories = float(macros.get('calories', 0)) if macros.get('calories') else 0.0
-        protein = parse_macro_value(macros.get('protein', 0))
-        carbs = parse_macro_value(macros.get('carbs', 0))
-        fat = parse_macro_value(macros.get('fat', 0))
-        fiber = parse_macro_value(macros.get('fiber', 0))
-        cost = float(recipe_data.get('cost_estimate', 0)) if recipe_data.get('cost_estimate') else 0.0
-
-        # Create nutrition log entry
-        nutrition_entry = {
-            "user_id": user_id,
-            "recipe_name": recipe_data.get('recipe_name', 'Generated Recipe'),
-            "recipe_data": recipe_data,
-            "date": log_date,
-            "calories": calories,
-            "protein": protein,
-            "carbs": carbs,
-            "fat": fat,
-            "fiber": fiber,
-            "cost": cost,
-            "cuisine": recipe_data.get('cuisine', 'Unknown'),
-            "logged_at": datetime.now().isoformat()
-        }
-
-        # Insert into nutrition_logs table
-        insert_result = supabase.table("nutrition_logs").insert(nutrition_entry).execute()
-
-        if insert_result.data and len(insert_result.data) > 0:
-            return {
-                "success": True,
-                "message": "Recipe successfully logged to nutrition tracker",
-                "log_id": insert_result.data[0]["id"],
-                "nutrition_summary": {
-                    "calories": calories,
-                    "protein": f"{protein}g",
-                    "cost": f"${cost:.2f}"
-                }
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Failed to log nutrition data")
-
-    except Exception as e:
-        print(f"❌ Error logging recipe nutrition: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to log meal: {str(e)}")
-
-
-@router.get("/daily-nutrition")
-def get_daily_nutrition(user_id: str = Query(...), date: str = Query(...)):
-    """Get all nutrition entries for a specific user and date"""
-    try:
-        if not supabase:
-            raise HTTPException(status_code=500, detail="Database not available")
-
-        # Fetch nutrition logs (recipe-based entries)
-        nutrition_logs_result = supabase.table("nutrition_logs") \
-            .select("*") \
-            .eq("user_id", user_id) \
-            .eq("date", date) \
-            .order("logged_at", desc=True) \
-            .execute()
-
-        # Fetch manual entries
-        manual_logs_result = supabase.table("manual_logs") \
-            .select("*") \
-            .eq("user_id", user_id) \
-            .eq("date", date) \
-            .order("created_at", desc=True) \
-            .execute()
-
-        # Combine and format all entries
-        all_logs = []
-        
-        # Process nutrition logs (from recipes)
-        for log in (nutrition_logs_result.data or []):            
-            all_logs.append({
-                "id": log["id"],
-                "type": "meal",
-                "recipe_data": {
-                    "recipe_name": log.get("recipe_name", "Recipe"),
-                    "macros": {
-                        "calories": log.get("calories", 0),
-                        "protein": f"{log.get('protein', 0)}g",
-                        "carbs": f"{log.get('carbs', 0)}g",
-                        "fat": f"{log.get('fat', 0)}g",
-                        "fiber": f"{log.get('fiber', 0)}g"
-                    },
-                    "cost_estimate": log.get("cost", 0),
-                    "cuisine": log.get("cuisine", "Unknown")
-                },
-                "logged_at": log.get("logged_at"),
-                "date": log["date"]
-            })
-
-        # Process manual logs
-        for log in (manual_logs_result.data or []):
-            all_logs.append({
-                "id": log["id"],
-                "type": "custom",
-                "food_name": log["food_name"],
-                "calories": log["calories"],
-                "protein": log["protein"],
-                "carbs": log["carbs"],
-                "fat": log["fat"],
-                "fiber": log.get("fiber", 0),
-                "logged_at": log.get("created_at"),
-                "date": log["date"]
-            })
-
-        all_logs.sort(key=lambda x: x.get("logged_at", ""), reverse=True)
-
-        return {
-            "logs": all_logs,
-            "date": date,
-            "total_entries": len(all_logs)
-        }
-
-    except Exception as e:
-        print(f"❌ Error getting daily nutrition: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get daily nutrition: {str(e)}")

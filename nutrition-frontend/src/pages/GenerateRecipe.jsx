@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import RecipeRatings from '../components/RecipeRatings';
-import { addRecipeToNutritionLog } from '../components/NutritionTracker';
 import { Utensils, CheckCircle } from 'lucide-react';
 
 export default function GenerateRecipe() {
@@ -70,7 +69,33 @@ export default function GenerateRecipe() {
     setTotalBudget(budget);
     setTotalPrepTime(prepTime);
   }, [plannedMeals]);
+  const addRecipeToNutritionLog = async (userId, recipeData) => {
+    try {
+      const response = await fetch('http://localhost:8000/quick-log-recipe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          recipe_data: recipeData
+        })
+      });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to log recipe');
+      }
+
+      const result = await response.json();
+      return result;
+
+    } catch (error) {
+      console.error('Error logging recipe to nutrition:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  };
   const handleGenerate = async (e) => {
     e.preventDefault();
     setErrorMsg('');
