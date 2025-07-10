@@ -38,6 +38,53 @@ export default function Favorites() {
       fetchCollections();
     }
   }, [userId, selectedCollection]);
+  const addFavoriteToNutritionLog = async (favorite) => {
+    if (!userId) {
+      alert('Please sign in to track nutrition');
+      return;
+    }
+
+    try {
+      const result = await fetch('http://localhost:8000/quick-log-recipe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          recipe_data: favorite.recipe_data || {
+            recipe_name: favorite.recipe_name,
+            macros: favorite.recipe_data?.macros || {},
+            cost_estimate: favorite.recipe_data?.cost_estimate || 0,
+            cuisine: favorite.recipe_data?.cuisine || 'Unknown'
+          }
+        })
+      });
+
+      if (result.ok) {
+        // Show success notification
+        const notification = document.createElement('div');
+        notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center';
+        notification.innerHTML = `
+        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+        </svg>
+        Added "${favorite.recipe_name}" to nutrition log!
+      `;
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+          if (document.body.contains(notification)) {
+            document.body.removeChild(notification);
+          }
+        }, 3000);
+      } else {
+        alert('Failed to add to nutrition log');
+      }
+    } catch (error) {
+      console.error('Error adding to nutrition log:', error);
+      alert('Error adding to nutrition log');
+    }
+  };
+
 
   const fetchFavorites = async () => {
     try {

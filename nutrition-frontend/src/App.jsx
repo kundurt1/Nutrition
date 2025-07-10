@@ -4,8 +4,10 @@ import HomePage from './pages/HomePage.jsx';
 import Preferences from './pages/Preferences';
 import GroceryList from './pages/GroceryList';
 import GenerateRecipe from './pages/GenerateRecipe';
-import Favorites from './pages/Favorites'; // Add this import
+import Favorites from './pages/Favorites';
 import RequireAuth from './components/RequireAuth';
+import NutritionPage from './pages/NutritionPage';
+
 
 export default function AppRoutes() {
   return (
@@ -59,6 +61,14 @@ export default function AppRoutes() {
           </RequireAuth>
         }
       />
+        <Route
+            path="/nutrition"
+            element={
+                <RequireAuth>
+                    <NutritionPage />
+                </RequireAuth>
+            }
+        />
     </Routes>
   );
 }

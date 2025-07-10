@@ -19,6 +19,7 @@ function App() {
         <Route path="/generate" element={<GenerateRecipe />} />
         <Route path="/home" element={<HomePage />} />
         <Route path="/favorites" element={<Favorites />} /> {/* Add this route */}
+        <Route path="/nutrition"element={ <RequireAuth> <NutritionPage /></RequireAuth>}/>
       </Routes>
     </div>
   )
