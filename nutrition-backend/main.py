@@ -1,9 +1,12 @@
+# nutrition-backend/main.py
+
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from routers import recipes, grocery, ratings, nutrition, favorites,mealPlanning
+from routers import recipes, grocery, ratings, nutrition, favorites, mealPlanning
+from routers import recipeScaling  # NEW - Add recipe scaling router
 
 # Load environment variables
 load_dotenv()
@@ -33,10 +36,23 @@ app.include_router(nutrition.router, tags=["nutrition"])
 app.include_router(favorites.router, tags=["favorites"])
 app.include_router(mealPlanning.router, tags=["meal-planning"])
 
+# NEW - Include recipe scaling router
+app.include_router(recipeScaling.router, prefix="/recipe-scaling", tags=["recipe-scaling"])
+
 @app.get("/")
 def root():
-    return {"api_key_loaded": bool(os.getenv("OPENAI_API_KEY"))}
+    return {
+        "api_key_loaded": bool(os.getenv("OPENAI_API_KEY")),
+        "features": [
+            "recipe_generation",
+            "grocery_management",
+            "ratings_and_favorites",
+            "nutrition_tracking",
+            "meal_planning",
+            "recipe_scaling"  # NEW
+        ]
+    }
 
 @app.get("/test")
 def test():
-    return {"message": "All routers working with your naming convention!"}
+    return {"message": "All routers working with recipe scaling functionality!"}

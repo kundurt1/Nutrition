@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import RecipeRatings from '../components/RecipeRatings';
+import RecipeScaling from '../components/RecipeScaling';
+
 import { Utensils, CheckCircle } from 'lucide-react';
+
 
 export default function GenerateRecipe() {
   const navigate = useNavigate();
@@ -613,143 +616,169 @@ export default function GenerateRecipe() {
 
   const weekDates = getWeekDates();
 
+// First, add this import at the top of your GenerateRecipe.jsx file:
+  import RecipeScaling from '../components/RecipeScaling';
+
+// Then replace your entire renderRecipe function with this updated version:
+
   const renderRecipe = (rec, idx) => {
-  const recipeName = rec.recipe_name || rec.recipe_text?.split('\n')[0] || `Recipe ${idx + 1}`;
-  const ingredients = rec.ingredients || [];
-  const directions = rec.directions || [];
-  const macros = rec.macros || {};
-  const tags = rec.tags || [];
-  
-  return (
-    <div 
-      key={idx} 
-      className="mb-8 border border-gray-200 rounded-lg overflow-hidden shadow-sm cursor-pointer"
-      onDoubleClick={() => handleDoubleClickAddToNutrition(rec, idx)}
-      title="Double-click to add to nutrition log"
-    >
-      {/* Recipe Header */}
-      <div className="bg-gradient-to-r from-blue-50 to-green-50 p-4 border-b border-gray-200">
-        <div className="flex justify-between items-start mb-3">
-          <h3 className="text-xl font-bold text-gray-900">Recipe {idx + 1}: {recipeName}</h3>
-          <div className="flex gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDoubleClickAddToNutrition(rec, idx);
-              }}
-              disabled={addingToNutrition[idx]}
-              className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50 flex items-center"
-            >
-              {addingToNutrition[idx] ? (
-                <>
-                  <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                  Adding...
-                </>
-              ) : (
-                <>
-                  <Utensils className="w-4 h-4 mr-2" />
-                  Log Nutrition
-                </>
-              )}
-            </button>
-            <button
-              onClick={() => addMealToDate(new Date(), rec)}
-              className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-            >
-              Add to Meal Plan
-            </button>
-            <button
-              onClick={() => handleRegenerateRecipe(idx)}
-              disabled={regeneratingIndex === idx || loading}
-              className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 disabled:opacity-50"
-            >
-              {regeneratingIndex === idx ? 'Regenerating...' : 'Regenerate'}
-            </button>
-          </div>
-        </div>
-        
-        {/* Nutrition Summary Card */}
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
-            <Utensils className="w-4 h-4 mr-2 text-green-600" />
-            Nutrition & Cost Summary
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-            <div className="bg-blue-50 rounded-lg p-3">
-              <div className="text-2xl font-bold text-blue-600">{macros.calories || 'N/A'}</div>
-              <div className="text-sm text-blue-800">Calories</div>
-            </div>
-            <div className="bg-red-50 rounded-lg p-3">
-              <div className="text-2xl font-bold text-red-600">{String(macros.protein || '0').replace('g', '')}g</div>
-              <div className="text-sm text-red-800">Protein</div>
-            </div>
-            <div className="bg-yellow-50 rounded-lg p-3">
-              <div className="text-2xl font-bold text-yellow-600">{String(macros.carbs || '0').replace('g', '')}g</div>
-              <div className="text-sm text-yellow-800">Carbs</div>
-            </div>
-            <div className="bg-purple-50 rounded-lg p-3">
-              <div className="text-2xl font-bold text-purple-600">{String(macros.fat || '0').replace('g', '')}g</div>
-              <div className="text-sm text-purple-800">Fat</div>
-            </div>
-            <div className="bg-green-50 rounded-lg p-3">
-              <div className="text-2xl font-bold text-green-600">${typeof rec.cost_estimate === 'number' ? rec.cost_estimate.toFixed(2) : '0.00'}</div>
-              <div className="text-sm text-green-800">Cost</div>
-            </div>
-          </div>
-        </div>
+    const recipeName = rec.recipe_name || rec.recipe_text?.split('\n')[0] || `Recipe ${idx + 1}`;
+    const ingredients = rec.ingredients || [];
+    const directions = rec.directions || [];
+    const macros = rec.macros || {};
+    const tags = rec.tags || [];
 
-        {/* Double-click hint */}
-        <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center">
-          <CheckCircle className="w-5 h-5 text-green-600 mr-3" />
-          <div className="text-sm text-green-800">
-            <strong>Quick Tip:</strong> Double-click anywhere on this recipe card to automatically log it to your nutrition tracker!
-          </div>
-        </div>
-      </div>
+    return (
+        <div
+            key={idx}
+            className="mb-8 border border-gray-200 rounded-lg overflow-hidden shadow-sm cursor-pointer"
+            onDoubleClick={() => handleDoubleClickAddToNutrition(rec, idx)}
+            title="Double-click to add to nutrition log"
+        >
+          {/* Recipe Header */}
+          <div className="bg-gradient-to-r from-blue-50 to-green-50 p-4 border-b border-gray-200">
+            <div className="flex justify-between items-start mb-3">
+              <h3 className="text-xl font-bold text-gray-900">Recipe {idx + 1}: {recipeName}</h3>
+              <div className="flex gap-2">
+                <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDoubleClickAddToNutrition(rec, idx);
+                    }}
+                    disabled={addingToNutrition[idx]}
+                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50 flex items-center"
+                >
+                  {addingToNutrition[idx] ? (
+                      <>
+                        <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                        Adding...
+                      </>
+                  ) : (
+                      <>
+                        <Utensils className="w-4 h-4 mr-2" />
+                        Log Nutrition
+                      </>
+                  )}
+                </button>
+                <button
+                    onClick={() => addMealToDate(new Date(), rec)}
+                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                >
+                  Add to Meal Plan
+                </button>
+                <button
+                    onClick={() => handleRegenerateRecipe(idx)}
+                    disabled={regeneratingIndex === idx || loading}
+                    className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 disabled:opacity-50"
+                >
+                  {regeneratingIndex === idx ? 'Regenerating...' : 'Regenerate'}
+                </button>
+              </div>
+            </div>
 
-      {/* Rest of your existing recipe rendering code for ingredients, directions, etc. */}
-      <div className="p-4">
-        {/* Your existing ingredients and directions rendering */}
-        {ingredients.length > 0 && (
-          <div className="mb-4">
-            <h4 className="text-lg font-semibold text-gray-900 mb-3">Ingredients</h4>
-            <ul className="space-y-2">
-              {ingredients.map((ing, i) => (
-                <li key={i} className="flex items-center text-gray-700">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
-                  {ing.quantity || ''} {ing.unit || ''} {ing.name || 'Unknown ingredient'}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+            {/* Nutrition Summary Card */}
+            <div className="bg-white rounded-lg p-4 shadow-sm">
+              <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
+                <Utensils className="w-4 h-4 mr-2 text-green-600" />
+                Nutrition & Cost Summary
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <div className="text-2xl font-bold text-blue-600">{macros.calories || 'N/A'}</div>
+                  <div className="text-sm text-blue-800">Calories</div>
+                </div>
+                <div className="bg-red-50 rounded-lg p-3">
+                  <div className="text-2xl font-bold text-red-600">{String(macros.protein || '0').replace('g', '')}g</div>
+                  <div className="text-sm text-red-800">Protein</div>
+                </div>
+                <div className="bg-yellow-50 rounded-lg p-3">
+                  <div className="text-2xl font-bold text-yellow-600">{String(macros.carbs || '0').replace('g', '')}g</div>
+                  <div className="text-sm text-yellow-800">Carbs</div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3">
+                  <div className="text-2xl font-bold text-purple-600">{String(macros.fat || '0').replace('g', '')}g</div>
+                  <div className="text-sm text-purple-800">Fat</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3">
+                  <div className="text-2xl font-bold text-green-600">${typeof rec.cost_estimate === 'number' ? rec.cost_estimate.toFixed(2) : '0.00'}</div>
+                  <div className="text-sm text-green-800">Cost</div>
+                </div>
+              </div>
+            </div>
 
-        {directions.length > 0 && (
-          <div className="mb-4">
-            <h4 className="text-lg font-semibold text-gray-900 mb-3">Directions</h4>
-            <ol className="space-y-3">
-              {directions.map((step, i) => (
-                <li key={i} className="flex text-gray-700">
+            {/* Double-click hint */}
+            <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center">
+              <CheckCircle className="w-5 h-5 text-green-600 mr-3" />
+              <div className="text-sm text-green-800">
+                <strong>Quick Tip:</strong> Double-click anywhere on this recipe card to automatically log it to your nutrition tracker!
+              </div>
+            </div>
+          </div>
+
+          {/* NEW: Recipe Scaling Component - Add this section */}
+          <div className="border-b border-gray-200">
+            <RecipeScaling
+                recipe={{
+                  name: recipeName,
+                  original_servings: 4,
+                  ingredients: ingredients,
+                  cost_estimate: rec.cost_estimate,
+                  macros: macros,
+                  directions: directions,
+                  cuisine: rec.cuisine,
+                  tags: tags,
+                  ...rec
+                }}
+                onRecipeUpdate={(scaledRecipe) => {
+                  // Optional: Update the recipe data when scaled
+                  console.log('Recipe scaled:', scaledRecipe);
+                }}
+            />
+          </div>
+
+          {/* Rest of your existing recipe rendering code for ingredients, directions, etc. */}
+          <div className="p-4">
+            {/* Your existing ingredients and directions rendering */}
+            {ingredients.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Ingredients</h4>
+                  <ul className="space-y-2">
+                    {ingredients.map((ing, i) => (
+                        <li key={i} className="flex items-center text-gray-700">
+                          <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                          {ing.quantity || ''} {ing.unit || ''} {ing.name || 'Unknown ingredient'}
+                        </li>
+                    ))}
+                  </ul>
+                </div>
+            )}
+
+            {directions.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Directions</h4>
+                  <ol className="space-y-3">
+                    {directions.map((step, i) => (
+                        <li key={i} className="flex text-gray-700">
                   <span className="flex-shrink-0 w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-semibold mr-3 mt-0.5">
                     {i + 1}
                   </span>
-                  <span>{step}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
+                          <span>{step}</span>
+                        </li>
+                    ))}
+                  </ol>
+                </div>
+            )}
 
-        {/*RecipeRatings component */}
-        <RecipeRatings 
-          recipeData={rec}
-          userId={userId}
-          onRatingSubmit={(rating, feedback) => console.log(`Recipe rated ${rating} stars`, feedback)}
-        />
-      </div>
-    </div>
-  );
-};
+            {/*RecipeRatings component */}
+            <RecipeRatings
+                recipeData={rec}
+                userId={userId}
+                onRatingSubmit={(rating, feedback) => console.log(`Recipe rated ${rating} stars`, feedback)}
+            />
+          </div>
+        </div>
+    );
+  };
 
   return (
     <div className="app-container">
