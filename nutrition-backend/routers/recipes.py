@@ -357,14 +357,15 @@ def generate_recipe_with_advanced_preferences(req: RecipeRequest):
         print(f"❌ Error in generate_recipe_with_advanced_preferences: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate recipes: {str(e)}")
 
+
 def parse_single_recipe(recipe_text: str, recipe_number: int) -> Dict:
-    """Parse a single recipe from OpenAI response text"""
-    
+    """Parse a single recipe from OpenAI response text with FIXED ingredient parsing"""
+
     # Extract recipe name
     recipe_name_match = re.search(r'RECIPE\s*\d*:?\s*(.+)', recipe_text)
     recipe_name = recipe_name_match.group(1).strip() if recipe_name_match else f"Recipe {recipe_number}"
 
-    # Parse ingredients
+    # Parse ingredients with FIXED logic
     parsed_ingredients = []
     ingredients_match = re.search(r'Ingredients:\s*\n(.*?)(?=\n\s*Directions:|\n\s*Nutrition|\Z)', recipe_text,
                                   re.DOTALL | re.IGNORECASE)
@@ -375,29 +376,13 @@ def parse_single_recipe(recipe_text: str, recipe_number: int) -> Dict:
             line = line.strip()
             if line and (line.startswith('-') or line.startswith('•') or line.startswith('*')):
                 line = re.sub(r'^[-•*]\s*', '', line).strip()
-                parts = line.split(' ', 2)
-                
-                if len(parts) >= 2:
-                    try:
-                        quantity_str = parts[0]
-                        quantity = float(Fraction(quantity_str))
-                        if len(parts) == 3:
-                            unit, name = parts[1], parts[2]
-                        else:
-                            unit, name = "", parts[1]
-                    except:
-                        quantity = 1.0
-                        unit, name = parts[0], ' '.join(parts[1:])
-                else:
-                    quantity, unit, name = 1.0, "", line
 
-                parsed_ingredients.append({
-                    "name": name.strip().lower(),
-                    "unit": unit.strip(),
-                    "quantity": quantity
-                })
+                # 🔧 FIXED INGREDIENT PARSING
+                ingredient = parse_ingredient_line_fixed(line)
+                if ingredient:
+                    parsed_ingredients.append(ingredient)
 
-    # Parse directions
+    # Parse directions (keep existing logic)
     parsed_directions = []
     directions_match = re.search(r'Directions:\s*\n(.*?)(?=\n\s*Nutrition|\n\s*Tags:|\Z)', recipe_text,
                                  re.DOTALL | re.IGNORECASE)
@@ -412,7 +397,7 @@ def parse_single_recipe(recipe_text: str, recipe_number: int) -> Dict:
                 if line.strip():
                     parsed_directions.append(line.strip())
 
-    # Parse nutrition macros
+    # Parse nutrition macros (keep existing logic)
     macros = {"calories": 0.0, "protein": "0g", "carbs": "0g", "fat": "0g", "fiber": "0g"}
     nutrition_match = re.search(r'Nutrition Facts:\s*\n(.*?)(?=\n\s*Tags:|\n\s*Cuisine:|\Z)', recipe_text,
                                 re.DOTALL | re.IGNORECASE)
@@ -434,7 +419,7 @@ def parse_single_recipe(recipe_text: str, recipe_number: int) -> Dict:
                 elif key in ['protein', 'carbs', 'fat', 'fiber']:
                     macros[key] = value
 
-    # Parse additional metadata
+    # Parse additional metadata (keep existing logic)
     tags = []
     tag_match = re.search(r'Tags:\s*(.+)', recipe_text, re.IGNORECASE)
     if tag_match:
@@ -451,7 +436,7 @@ def parse_single_recipe(recipe_text: str, recipe_number: int) -> Dict:
     if diet_match:
         diet = diet_match.group(1).strip()
 
-    # Parse time information
+    # Parse time information (keep existing logic)
     prep_time = ""
     prep_match = re.search(r'Prep Time:\s*(.+)', recipe_text, re.IGNORECASE)
     if prep_match:
@@ -467,7 +452,7 @@ def parse_single_recipe(recipe_text: str, recipe_number: int) -> Dict:
     if difficulty_match:
         difficulty = difficulty_match.group(1).strip()
 
-    # Parse cost estimate
+    # Parse cost estimate (keep existing logic)
     cost_estimate = 0.0
     cost_match = re.search(r'Cost Estimate:\s*\$?([\d.]+)', recipe_text)
     if cost_match:
@@ -479,7 +464,7 @@ def parse_single_recipe(recipe_text: str, recipe_number: int) -> Dict:
             2
         )
 
-    # Build grocery list
+    # Build grocery list (keep existing logic)
     grocery_list = estimate_grocery_list(parsed_ingredients)
 
     return {
@@ -496,6 +481,73 @@ def parse_single_recipe(recipe_text: str, recipe_number: int) -> Dict:
         "difficulty": difficulty,
         "cost_estimate": round(cost_estimate, 2),
         "grocery_list": grocery_list
+    }
+
+
+def parse_ingredient_line_fixed(line: str) -> dict:
+    """
+    🔧 FIXED ingredient parsing logic
+    Properly handles: "1 onion, diced", "2 cans chickpeas", "1 cup diced tomatoes"
+    """
+
+    # Common units for better detection
+    common_units = [
+        'cup', 'cups', 'tbsp', 'tsp', 'teaspoon', 'teaspoons', 'tablespoon', 'tablespoons',
+        'lb', 'lbs', 'pound', 'pounds', 'oz', 'ounce', 'ounces', 'gram', 'grams', 'kg',
+        'cloves', 'clove', 'piece', 'pieces', 'slice', 'slices', 'can', 'cans', 'jar', 'jars',
+        'bottle', 'bottles', 'pack', 'packs', 'head', 'heads', 'bunch', 'bunches'
+    ]
+
+    # Step 1: Extract quantity (numbers/fractions at the beginning)
+    quantity_pattern = r'^(\d+(?:\.\d+)?(?:/\d+)?|\d+\s+\d+/\d+)'
+    quantity_match = re.search(quantity_pattern, line)
+
+    if quantity_match:
+        quantity_str = quantity_match.group(1)
+        remaining_text = line[quantity_match.end():].strip()
+
+        try:
+            if '/' in quantity_str:
+                quantity = float(Fraction(quantity_str))
+            else:
+                quantity = float(quantity_str)
+        except:
+            quantity = 1.0
+            remaining_text = line
+    else:
+        # No quantity found - set default
+        quantity = 1.0
+        remaining_text = line
+
+    # Step 2: Try to extract unit from the remaining text
+    unit = ""
+    ingredient_name = remaining_text
+
+    # Check if the remaining text starts with a common unit
+    words = remaining_text.split()
+    if words:
+        first_word = words[0].lower().rstrip(',')
+        if first_word in common_units:
+            unit = first_word
+            ingredient_name = ' '.join(words[1:])
+
+    # Step 3: Clean up the ingredient name
+    ingredient_name = ingredient_name.strip()
+
+    # Remove trailing commas and clean up
+    ingredient_name = re.sub(r',\s*$', '', ingredient_name)
+    unit = unit.strip(',')
+
+    # Step 4: Handle special cases where there's no unit but descriptive text
+    if not unit and ',' in ingredient_name:
+        # Cases like "1 onion, diced" - the part after comma is usually preparation
+        parts = ingredient_name.split(',', 1)
+        ingredient_name = parts[0].strip()
+
+    return {
+        "name": ingredient_name.strip().lower(),
+        "unit": unit.strip(),
+        "quantity": quantity
     }
 
 def estimate_grocery_list(ingredients: List[Dict]) -> List[Dict]:

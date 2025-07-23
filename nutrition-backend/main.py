@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from routers import recipes, grocery, ratings, nutrition, favorites, mealPlanning
+from routers import recipes, grocery, ratings, nutrition, favorites, mealPlanning,pantry
 from routers import recipeScaling  # NEW - Add recipe scaling router
 
 # Load environment variables
@@ -35,8 +35,7 @@ app.include_router(ratings.router, tags=["ratings"])
 app.include_router(nutrition.router, tags=["nutrition"])
 app.include_router(favorites.router, tags=["favorites"])
 app.include_router(mealPlanning.router, tags=["meal-planning"])
-
-# NEW - Include recipe scaling router
+app.include_router(pantry.router, tags=["pantry"])
 app.include_router(recipeScaling.router, prefix="/recipe-scaling", tags=["recipe-scaling"])
 
 @app.get("/")
