@@ -1089,7 +1089,54 @@ export default function HomePage() {
                   </div>
               )}
             </div>
+            {/* AI Nutrition Coach - NEW CARD */}
+            <div
+                onClick={() => navigate('/nutrition-coach')}
+                style={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  padding: '32px 24px',
+                  borderRadius: '20px',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  textAlign: 'center',
+                  color: 'white',
+                  boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)',
+                  border: 'none',
+                  position: 'relative'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 16px 48px rgba(102, 126, 234, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.boxShadow = '0 8px 32px rgba(102, 126, 234, 0.3)';
+                }}
+            >
+              <div style={{ fontSize: '3.5rem', marginBottom: '16px' }}>🧠</div>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '1.3rem', fontWeight: '700' }}>
+                AI Nutrition Coach
+              </h3>
+              <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.9, lineHeight: '1.4' }}>
+                Get personalized coaching for your fitness goals with AI-powered insights
+              </p>
 
+              {/* NEW badge */}
+              <div style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                backgroundColor: 'rgba(255,255,255,0.3)',
+                color: 'white',
+                padding: '6px 12px',
+                borderRadius: '20px',
+                fontSize: '0.8rem',
+                fontWeight: '700',
+                border: '2px solid rgba(255,255,255,0.5)'
+              }}>
+                NEW
+              </div>
+            </div>
             {/* Preferences */}
             <div
                 onClick={() => navigate('/preferences')}
