@@ -1,4 +1,6 @@
 // src/pages/NutritionCoachPage.jsx
+// Complete implementation with proper API endpoints and error handling
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
@@ -51,12 +53,20 @@ const NutritionCoachPage = () => {
     const loadCoachingDashboard = async () => {
         setLoading(true);
         try {
-            const response = await fetch(`http://localhost:8000/coaching-dashboard/${userId}`);
+            const response = await fetch(`http://localhost:8000/coaching/coaching-dashboard/${userId}`);
             if (response.ok) {
                 const data = await response.json();
+                console.log('Dashboard data received:', data); // Debug log
                 setCoachingData(data.data);
                 setUserProfile(data.data.user_profile);
                 setWeeklyInsights(data.data.weekly_insights);
+            } else {
+                const errorData = await response.json();
+                console.error('Dashboard error:', errorData);
+                if (response.status === 404) {
+                    // User hasn't completed assessment, redirect
+                    navigate('/fitness-assessment');
+                }
             }
         } catch (error) {
             console.error('Error loading coaching dashboard:', error);
@@ -67,11 +77,11 @@ const NutritionCoachPage = () => {
 
     const loadGoalProgress = async () => {
         try {
-            const response = await fetch(`http://localhost:8000/goal-progress/${userId}?weeks=12`);
+            const response = await fetch(`http://localhost:8000/coaching/goal-progress/${userId}?weeks=12`);
             if (response.ok) {
                 const data = await response.json();
                 setGoalProgress(data.data);
-                setProgressHistory(data.data.current_progress?.history || []);
+                setProgressHistory(data.data.progress_history || []);
             }
         } catch (error) {
             console.error('Error loading goal progress:', error);
@@ -81,7 +91,7 @@ const NutritionCoachPage = () => {
     const runWeeklyAnalysis = async () => {
         try {
             setLoading(true);
-            const response = await fetch(`http://localhost:8000/weekly-analysis?user_id=${userId}`, {
+            const response = await fetch(`http://localhost:8000/coaching/weekly-analysis?user_id=${userId}`, {
                 method: 'POST'
             });
             if (response.ok) {
@@ -94,6 +104,45 @@ const NutritionCoachPage = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    // Helper function to safely get insights array
+    const getInsightsArray = (insights) => {
+        if (!insights) return [];
+        if (Array.isArray(insights)) return insights;
+        if (typeof insights === 'string') {
+            // If it's a string, try to parse it or split it
+            try {
+                const parsed = JSON.parse(insights);
+                return Array.isArray(parsed) ? parsed : [insights];
+            } catch {
+                // If parsing fails, treat as single insight
+                return [insights];
+            }
+        }
+        if (typeof insights === 'object') {
+            // If it's an object, extract values or convert to array
+            return Object.values(insights).filter(val => typeof val === 'string');
+        }
+        return [];
+    };
+
+    // Helper function to safely get concerns array
+    const getConcernsArray = (concerns) => {
+        if (!concerns) return [];
+        if (Array.isArray(concerns)) return concerns;
+        if (typeof concerns === 'string') {
+            try {
+                const parsed = JSON.parse(concerns);
+                return Array.isArray(parsed) ? parsed : [concerns];
+            } catch {
+                return [concerns];
+            }
+        }
+        if (typeof concerns === 'object') {
+            return Object.values(concerns).filter(val => typeof val === 'string');
+        }
+        return [];
     };
 
     // Dashboard Overview Component
@@ -120,7 +169,7 @@ const NutritionCoachPage = () => {
             {/* Current Macro Targets */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {coachingData?.current_macros && Object.entries(coachingData.current_macros).map(([key, value]) => {
-                    if (key === 'meal_distribution') return null;
+                    if (key === 'meal_distribution' || key === 'protein_priority' || key === 'carb_timing') return null;
 
                     const getIcon = (macroKey) => {
                         switch(macroKey) {
@@ -196,9 +245,18 @@ const NutritionCoachPage = () => {
                         </button>
                     </div>
 
-                    {weeklyInsights.key_insights && (
-                        <div className="space-y-3">
-                            {weeklyInsights.key_insights.map((insight, index) => (
+                    {/* Debug info */}
+                    {process.env.NODE_ENV === 'development' && (
+                        <div className="mb-4 p-2 bg-gray-100 rounded text-xs">
+                            <strong>Debug:</strong> weeklyInsights type: {typeof weeklyInsights?.key_insights},
+                            value: {JSON.stringify(weeklyInsights?.key_insights)}
+                        </div>
+                    )}
+
+                    {/* FIXED: Safe array handling for insights */}
+                    {weeklyInsights.key_insights && getInsightsArray(weeklyInsights.key_insights).length > 0 && (
+                        <div className="space-y-3 mb-4">
+                            {getInsightsArray(weeklyInsights.key_insights).map((insight, index) => (
                                 <div key={index} className="flex items-start space-x-3 p-3 bg-purple-50 rounded-lg">
                                     <CheckCircle className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
                                     <p className="text-gray-700">{insight}</p>
@@ -207,10 +265,11 @@ const NutritionCoachPage = () => {
                         </div>
                     )}
 
-                    {weeklyInsights.areas_of_concern && weeklyInsights.areas_of_concern.length > 0 && (
-                        <div className="mt-4 space-y-2">
+                    {/* FIXED: Safe array handling for concerns */}
+                    {weeklyInsights.areas_of_concern && getConcernsArray(weeklyInsights.areas_of_concern).length > 0 && (
+                        <div className="space-y-2">
                             <h4 className="font-medium text-orange-800">Areas to Focus On:</h4>
-                            {weeklyInsights.areas_of_concern.map((concern, index) => (
+                            {getConcernsArray(weeklyInsights.areas_of_concern).map((concern, index) => (
                                 <div key={index} className="flex items-start space-x-3 p-3 bg-orange-50 rounded-lg">
                                     <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
                                     <p className="text-gray-700">{concern}</p>
@@ -218,6 +277,16 @@ const NutritionCoachPage = () => {
                             ))}
                         </div>
                     )}
+
+                    {/* Show message if no insights available */}
+                    {(!weeklyInsights.key_insights || getInsightsArray(weeklyInsights.key_insights).length === 0) &&
+                        (!weeklyInsights.areas_of_concern || getConcernsArray(weeklyInsights.areas_of_concern).length === 0) && (
+                            <div className="text-center py-6">
+                                <Brain className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                <p className="text-gray-500">No insights available yet</p>
+                                <p className="text-sm text-gray-400 mt-1">Log some progress data to get personalized insights!</p>
+                            </div>
+                        )}
                 </div>
             )}
 
@@ -258,7 +327,7 @@ const NutritionCoachPage = () => {
         const generateGoalRecipe = async () => {
             setRecipeLoading(true);
             try {
-                const response = await fetch('http://localhost:8000/generate-goal-recipe', {
+                const response = await fetch('http://localhost:8000/coaching/generate-goal-recipe', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -271,9 +340,13 @@ const NutritionCoachPage = () => {
                 if (response.ok) {
                     const data = await response.json();
                     setGeneratedRecipe(data.data);
+                } else {
+                    console.error('Recipe generation failed');
+                    alert('Recipe generation failed. Please try again.');
                 }
             } catch (error) {
                 console.error('Error generating goal recipe:', error);
+                alert('Network error generating recipe. Please try again.');
             } finally {
                 setRecipeLoading(false);
             }
@@ -361,15 +434,18 @@ const NutritionCoachPage = () => {
 
                             {/* Macro breakdown */}
                             <div className="grid grid-cols-4 gap-4 mb-6">
-                                {Object.entries(generatedRecipe.meal_macros).map(([key, value]) => (
-                                    <div key={key} className="text-center p-3 bg-gray-50 rounded-lg">
-                                        <div className="text-xs text-gray-500 uppercase tracking-wide">{key}</div>
-                                        <div className="text-lg font-bold text-gray-900">
-                                            {typeof value === 'number' ? value.toFixed(key === 'calories' ? 0 : 1) : value}
-                                            {key === 'calories' ? '' : 'g'}
+                                {Object.entries(generatedRecipe.meal_macros).map(([key, value]) => {
+                                    if (key === 'protein_priority' || key === 'carb_timing') return null;
+                                    return (
+                                        <div key={key} className="text-center p-3 bg-gray-50 rounded-lg">
+                                            <div className="text-xs text-gray-500 uppercase tracking-wide">{key}</div>
+                                            <div className="text-lg font-bold text-gray-900">
+                                                {typeof value === 'number' ? value.toFixed(key === 'calories' ? 0 : 1) : value}
+                                                {key === 'calories' ? '' : 'g'}
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
 
                             {/* Recipe details */}
@@ -431,7 +507,7 @@ const NutritionCoachPage = () => {
         const handleProgressSubmit = async (e) => {
             e.preventDefault();
             try {
-                const response = await fetch('http://localhost:8000/log-progress', {
+                const response = await fetch('http://localhost:8000/coaching/log-progress', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -454,9 +530,13 @@ const NutritionCoachPage = () => {
                     });
                     loadCoachingDashboard(); // Refresh dashboard
                     alert('Progress logged successfully!');
+                } else {
+                    const errorData = await response.json();
+                    alert(`Error logging progress: ${errorData.detail || 'Please try again'}`);
                 }
             } catch (error) {
                 console.error('Error logging progress:', error);
+                alert('Network error logging progress. Please try again.');
             }
         };
 
@@ -637,6 +717,140 @@ const NutritionCoachPage = () => {
         );
     };
 
+    // Goal Update Modal Component
+    const GoalUpdateModal = () => {
+        const [newGoal, setNewGoal] = useState(userProfile?.goal || '');
+        const [newTimeline, setNewTimeline] = useState(userProfile?.timeline_weeks || 12);
+        const [updating, setUpdating] = useState(false);
+
+        const availableGoals = [
+            { value: 'strength_building', label: 'Strength Building', description: 'Build muscle and increase strength' },
+            { value: 'fat_loss', label: 'Fat Loss', description: 'Lose body fat while preserving muscle' },
+            { value: 'muscle_gain', label: 'Muscle Gain', description: 'Maximize muscle growth' },
+            { value: 'body_recomposition', label: 'Body Recomposition', description: 'Lose fat and gain muscle simultaneously' },
+            { value: 'cutting', label: 'Cutting', description: 'Achieve a lean, defined physique' },
+            { value: 'bulking', label: 'Bulking', description: 'Gain weight and muscle mass efficiently' },
+            { value: 'maintenance', label: 'Maintenance', description: 'Maintain current physique and health' }
+        ];
+
+        const handleGoalUpdate = async () => {
+            setUpdating(true);
+            try {
+                const response = await fetch(`http://localhost:8000/coaching/update-goal?user_id=${userId}&new_goal=${newGoal}&timeline_weeks=${newTimeline}`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    await loadCoachingDashboard(); // Refresh dashboard
+                    setShowGoalUpdate(false);
+                    alert('Goal updated successfully! Your macro targets have been recalculated.');
+                } else {
+                    const errorData = await response.json();
+                    alert(`Goal update failed: ${errorData.detail || 'Please try again'}`);
+                }
+            } catch (error) {
+                console.error('Error updating goal:', error);
+                alert('Goal update failed. Please try again.');
+            } finally {
+                setUpdating(false);
+            }
+        };
+
+        if (!showGoalUpdate) return null;
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-xl font-semibold flex items-center">
+                            <Target className="w-6 h-6 mr-2 text-purple-600" />
+                            Update Your Goals
+                        </h3>
+                        <button
+                            onClick={() => setShowGoalUpdate(false)}
+                            className="text-gray-400 hover:text-gray-600"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <div className="space-y-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-3">
+                                Primary Fitness Goal
+                            </label>
+                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                                {availableGoals.map(goal => (
+                                    <button
+                                        key={goal.value}
+                                        onClick={() => setNewGoal(goal.value)}
+                                        className={`w-full p-3 border-2 rounded-lg text-left transition-colors ${
+                                            newGoal === goal.value
+                                                ? 'border-purple-500 bg-purple-50'
+                                                : 'border-gray-200 hover:border-purple-300'
+                                        }`}
+                                    >
+                                        <div className="font-medium text-gray-900">{goal.label}</div>
+                                        <div className="text-sm text-gray-600">{goal.description}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Timeline (weeks)
+                            </label>
+                            <input
+                                type="number"
+                                min="4"
+                                max="52"
+                                value={newTimeline}
+                                onChange={(e) => setNewTimeline(parseInt(e.target.value))}
+                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                placeholder="e.g., 12"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Recommended: 8-16 weeks for most goals</p>
+                        </div>
+
+                        <div className="bg-blue-50 rounded-lg p-4">
+                            <h4 className="font-medium text-blue-900 mb-2">What happens when you update?</h4>
+                            <ul className="text-sm text-blue-800 space-y-1">
+                                <li>• Your macro targets will be recalculated</li>
+                                <li>• Training phase will reset to Foundation</li>
+                                <li>• Recipe recommendations will be updated</li>
+                                <li>• Progress tracking will adapt to new goal</li>
+                            </ul>
+                        </div>
+
+                        <div className="flex space-x-3 pt-4">
+                            <button
+                                onClick={() => setShowGoalUpdate(false)}
+                                className="flex-1 px-4 py-3 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleGoalUpdate}
+                                disabled={updating || !newGoal}
+                                className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+                            >
+                                {updating ? (
+                                    <>
+                                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                        Updating...
+                                    </>
+                                ) : (
+                                    'Update Goal'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     // Progress Modal Component
     const ProgressModal = () => {
         if (!showProgressModal) return null;
@@ -738,6 +952,7 @@ const NutritionCoachPage = () => {
 
             {/* Modals */}
             <ProgressModal />
+            <GoalUpdateModal />
         </div>
     );
 };

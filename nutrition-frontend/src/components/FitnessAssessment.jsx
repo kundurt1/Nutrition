@@ -1,4 +1,6 @@
 // src/components/FitnessAssessment.jsx
+// Updated to use correct API endpoints with /coaching prefix
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
@@ -6,6 +8,47 @@ import {
     Target, User, Activity, Calendar, Trophy,
     ArrowRight, ArrowLeft, CheckCircle, AlertCircle
 } from 'lucide-react';
+
+// Error boundary component moved to top level
+const ErrorBoundary = ({ children }) => {
+    const [hasError, setHasError] = React.useState(false);
+    const [error, setError] = React.useState(null);
+
+    React.useEffect(() => {
+        const handleError = (error) => {
+            console.error('Error caught by boundary:', error);
+            setHasError(true);
+            setError(error);
+        };
+
+        window.addEventListener('error', handleError);
+        window.addEventListener('unhandledrejection', handleError);
+
+        return () => {
+            window.removeEventListener('error', handleError);
+            window.removeEventListener('unhandledrejection', handleError);
+        };
+    }, []);
+
+    if (hasError) {
+        return (
+            <div className="max-w-4xl mx-auto p-6">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-8 text-center">
+                    <h2 className="text-xl font-bold text-red-800 mb-4">Something went wrong</h2>
+                    <p className="text-red-600 mb-4">There was an error loading the fitness assessment.</p>
+                    <button
+                        onClick={() => {setHasError(false); window.location.reload();}}
+                        className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+                    >
+                        Reload Page
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    return children;
+};
 
 const FitnessAssessment = ({ onComplete }) => {
     const navigate = useNavigate();
@@ -55,15 +98,15 @@ const FitnessAssessment = ({ onComplete }) => {
 
     const loadAvailableOptions = async () => {
         try {
-            // Load available goals
-            const goalsResponse = await fetch('http://localhost:8000/available-goals');
+            // FIXED: Load available goals with correct endpoint
+            const goalsResponse = await fetch('http://localhost:8000/coaching/available-goals');
             if (goalsResponse.ok) {
                 const goalsData = await goalsResponse.json();
                 setAvailableGoals(goalsData.data.goals);
             }
 
-            // Load activity levels
-            const activityResponse = await fetch('http://localhost:8000/activity-levels');
+            // FIXED: Load activity levels with correct endpoint
+            const activityResponse = await fetch('http://localhost:8000/coaching/activity-levels');
             if (activityResponse.ok) {
                 const activityData = await activityResponse.json();
                 setAvailableActivityLevels(activityData.data.activity_levels);
@@ -84,13 +127,15 @@ const FitnessAssessment = ({ onComplete }) => {
                 if (!assessmentData.height_cm || assessmentData.height_cm < 120 || assessmentData.height_cm > 220) {
                     newErrors.height_cm = 'Please enter a valid height in cm (120-220)';
                 }
-                if (!assessmentData.current_weight || assessmentData.current_weight < 40 || assessmentData.current_weight > 200) {
-                    newErrors.current_weight = 'Please enter a valid weight in lbs (40-200)';
+                // FIXED: Increased weight range to be more realistic
+                if (!assessmentData.current_weight || assessmentData.current_weight < 40 || assessmentData.current_weight > 500) {
+                    newErrors.current_weight = 'Please enter a valid weight in lbs (40-500)';
                 }
                 break;
 
             case 2: // Goals
-                if (!assessmentData.target_weight || assessmentData.target_weight < 40 || assessmentData.target_weight > 200) {
+                // FIXED: Increased weight range to be more realistic
+                if (!assessmentData.target_weight || assessmentData.target_weight < 40 || assessmentData.target_weight > 500) {
                     newErrors.target_weight = 'Please enter a valid target weight';
                 }
                 if (assessmentData.timeline_weeks < 4 || assessmentData.timeline_weeks > 52) {
@@ -139,7 +184,9 @@ const FitnessAssessment = ({ onComplete }) => {
 
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:8000/assess-fitness-goals', {
+            console.log('Submitting assessment data:', assessmentData);
+
+            const response = await fetch('http://localhost:8000/coaching/assess-fitness-goals', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -156,19 +203,29 @@ const FitnessAssessment = ({ onComplete }) => {
                 })
             });
 
-            if (response.ok) {
-                const result = await response.json();
+            const result = await response.json();
+            console.log('Assessment response:', result);
+
+            if (response.ok && result.success) {
+                console.log('Assessment completed successfully:', result);
+
+                // Show success message
+                alert('Fitness assessment completed successfully! Your personalized plan has been created.');
+
                 if (onComplete) {
                     onComplete(result.data);
                 } else {
-                    navigate('/nutrition-coach');
+                    // Navigate to coaching dashboard instead of nutrition-coach
+                    navigate('/coaching-dashboard');
                 }
             } else {
-                throw new Error('Assessment submission failed');
+                console.error('Assessment submission failed:', result);
+                const errorMessage = result.detail || result.message || 'Assessment submission failed. Please try again.';
+                alert(`Assessment Error: ${errorMessage}`);
             }
         } catch (error) {
             console.error('Error submitting assessment:', error);
-            alert('Assessment submission failed. Please try again.');
+            alert('Network error: Please check your connection and try again.');
         } finally {
             setLoading(false);
         }
@@ -467,6 +524,23 @@ const FitnessAssessment = ({ onComplete }) => {
 
     const StepComponent = stepComponents[currentStep];
 
+    // Loading state during submission
+    if (loading) {
+        return (
+            <div className="max-w-4xl mx-auto p-6">
+                <div className="bg-white rounded-lg shadow-lg p-8">
+                    <div className="flex items-center justify-center h-64">
+                        <div className="text-center">
+                            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                            <p className="text-gray-600">Creating your personalized coaching plan...</p>
+                            <p className="text-sm text-gray-500 mt-2">This may take a moment as we calculate your optimal macro targets</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="max-w-4xl mx-auto p-6">
             {/* Progress indicator */}
@@ -491,9 +565,9 @@ const FitnessAssessment = ({ onComplete }) => {
                 </div>
 
                 <div className="text-center">
-          <span className="text-sm text-gray-600">
-            Step {currentStep} of 4
-          </span>
+                    <span className="text-sm text-gray-600">
+                        Step {currentStep} of 4
+                    </span>
                 </div>
             </div>
 
@@ -552,4 +626,11 @@ const FitnessAssessment = ({ onComplete }) => {
     );
 };
 
-export default FitnessAssessment;
+// Wrap your main component export with the ErrorBoundary at the top level
+export default function FitnessAssessmentWithBoundary(props) {
+    return (
+        <ErrorBoundary>
+            <FitnessAssessment {...props} />
+        </ErrorBoundary>
+    );
+}
