@@ -52,6 +52,17 @@ function App() {
                 </RequireAuth>
               }
           />
+            import SocialMediaImport from './components/SocialMediaImport';
+
+            // Add the route (inside your Routes component)
+            <Route
+                path="/import-recipe"
+                element={
+                    <RequireAuth>
+                        <SocialMediaImport />
+                    </RequireAuth>
+                }
+            />
         </Routes>
       </div>
   )

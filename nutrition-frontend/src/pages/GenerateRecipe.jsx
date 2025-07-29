@@ -909,6 +909,13 @@ export default function GenerateRecipe() {
                 onRatingSubmit={(rating, feedback) => console.log(`Recipe rated ${rating} stars`, feedback)}
             />
           </div>
+          <button
+              onClick={() => navigate('/import-recipe')}
+              className="btn-secondary"
+          >
+            <Share2 className="w-4 h-4 mr-2" />
+            Import from Social Media
+          </button>
   </div>
   );
   };

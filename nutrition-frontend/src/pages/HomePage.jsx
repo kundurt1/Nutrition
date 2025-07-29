@@ -1137,6 +1137,36 @@ export default function HomePage() {
                 NEW
               </div>
             </div>
+            {/* Social Media Import Card */}
+            <div
+                onClick={() => navigate('/import-recipe')}
+                style={{
+                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                  padding: '32px 24px',
+                  borderRadius: '20px',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  textAlign: 'center',
+                  color: 'white',
+                  boxShadow: '0 8px 32px rgba(245, 87, 108, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-4px)';
+                  e.currentTarget.style.boxShadow = '0 12px 40px rgba(245, 87, 108, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 8px 32px rgba(245, 87, 108, 0.3)';
+                }}
+            >
+              <Share2 size={48} style={{ marginBottom: '16px', opacity: 0.9 }} />
+              <h3 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '8px' }}>
+                Import from Social Media
+              </h3>
+              <p style={{ fontSize: '0.95rem', opacity: 0.9 }}>
+                Turn viral TikTok & Instagram recipes into personalized meals
+              </p>
+            </div>
             {/* Preferences */}
             <div
                 onClick={() => navigate('/preferences')}

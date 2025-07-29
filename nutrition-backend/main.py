@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 
 from routers import recipes, grocery, ratings, nutrition, favorites, mealPlanning, pantry
 from routers import recipeScaling
-from routers import nutritionCoach  # ADD THIS LINE - Import the coaching router
+from routers import nutritionCoach
+from routers import socialMediaImport
+
 
 # Load environment variables
 load_dotenv()
@@ -38,7 +40,9 @@ app.include_router(favorites.router, tags=["favorites"])
 app.include_router(mealPlanning.router, tags=["meal-planning"])
 app.include_router(pantry.router, tags=["pantry"])
 app.include_router(recipeScaling.router, prefix="/recipe-scaling", tags=["recipe-scaling"])
-app.include_router(nutritionCoach.router, prefix="/coaching", tags=["coaching"])  # ADD THIS LINE
+app.include_router(nutritionCoach.router, prefix="/coaching", tags=["coaching"])
+app.include_router(socialMediaImport.router, prefix="/social", tags=["social"])
+
 
 @app.get("/")
 def root():
