@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { Share2 } from 'lucide-react';
+
 
 export default function HomePage() {
   const navigate = useNavigate();

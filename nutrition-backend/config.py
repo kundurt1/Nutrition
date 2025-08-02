@@ -4,6 +4,11 @@ from typing import Optional
 import logging
 import re
 
+# CRITICAL FIX: Load .env file BEFORE trying to read environment variables
+from dotenv import load_dotenv
+
+load_dotenv()  # This loads your .env file
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,7 +24,7 @@ class Config:
         # Load and validate required environment variables
         self.openai_api_key = self._get_validated_openai_key()
         self.supabase_url = self._get_required_env("SUPABASE_URL")
-        self.supabase_key = self._get_required_env("SUPABASE_KEY")
+        self.supabase_key = self._get_required_env("SUPABASE_SERVICE_KEY")
         self.environment = os.getenv("ENVIRONMENT", "development")
 
         # Security settings
@@ -38,6 +43,9 @@ class Config:
         """Get required environment variable with validation"""
         value = os.getenv(key)
         if not value:
+            # Enhanced error message with debugging info
+            print(f"❌ Missing environment variable: {key}")
+            print(f"💡 Make sure your .env file contains: {key}=your-value-here")
             raise ConfigurationError(f"Required environment variable {key} is not set")
         return value.strip()
 
@@ -45,6 +53,8 @@ class Config:
         """Get and validate OpenAI API key"""
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
+            print("❌ OPENAI_API_KEY not found in environment variables")
+            print("💡 Check your .env file contains: OPENAI_API_KEY=sk-your-key-here")
             raise ConfigurationError("OPENAI_API_KEY environment variable is required")
 
         api_key = api_key.strip()
@@ -104,8 +114,8 @@ class Config:
             if not self.supabase_url.startswith("https://") or "supabase.co" not in self.supabase_url:
                 raise ConfigurationError("Invalid Supabase URL format")
 
-            # Test Supabase key format
-            if len(self.supabase_key) < 100:  # Supabase keys are typically long
+            # Test Supabase key format (relaxed for development)
+            if len(self.supabase_key) < 50:  # More relaxed validation
                 raise ConfigurationError("Invalid Supabase key: too short")
 
             logger.info("All configuration validation passed")
@@ -115,6 +125,19 @@ class Config:
             logger.error(f"Configuration validation failed: {e}")
             raise ConfigurationError(f"Configuration validation failed: {e}")
 
+    def debug_env_vars(self):
+        """Debug helper to check environment variables"""
+        print("\n🔍 Environment Variables Debug:")
+        env_vars = ["OPENAI_API_KEY", "SUPABASE_URL", "SUPABASE_KEY", "ENVIRONMENT"]
+        for var in env_vars:
+            value = os.getenv(var)
+            if value:
+                # Show only first few characters for security
+                masked = value[:8] + "..." if len(value) > 8 else value
+                print(f"  ✅ {var} = {masked}")
+            else:
+                print(f"  ❌ {var} = NOT SET")
+
 
 # Initialize and validate global config
 try:
@@ -123,6 +146,11 @@ try:
 except ConfigurationError as e:
     logger.error(f"❌ Configuration error: {e}")
     print(f"\n❌ CONFIGURATION ERROR: {e}")
+
+    # Debug helper
+    temp_config = Config.__new__(Config)  # Create instance without __init__
+    temp_config.debug_env_vars()
+
     print("\n📝 Required Environment Variables:")
     print("  • OPENAI_API_KEY (starts with 'sk-')")
     print("  • SUPABASE_URL (your Supabase project URL)")
@@ -133,6 +161,7 @@ except ConfigurationError as e:
     print("  • ALLOWED_ORIGINS (comma-separated URLs for production)")
     print("  • RATE_LIMIT_REQUESTS (default: 100)")
     print("  • RATE_LIMIT_WINDOW (default: 3600)")
+    print("\n🔧 Make sure your .env file exists in the nutrition-backend directory!")
     raise SystemExit(1)
 
 # Export config

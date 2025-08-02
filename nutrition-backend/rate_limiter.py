@@ -285,3 +285,74 @@ async def rate_limit_middleware(request: Request, call_next):
     }
 
     limiter = limiters.get(endpoint_type, RateLimitConfig.GENERAL)
+
+    # Check rate limit
+    try:
+        is_allowed, rate_info = await limiter.is_allowed(client_id, endpoint_type)
+
+        if not is_allowed:
+            logger.warning(f"Rate limit exceeded for {client_id[:8]}... on {endpoint_type}: {rate_info}")
+
+            # Create rate limit response
+            response_data = {
+                "error": "Rate limit exceeded",
+                "message": f"Too many requests for {endpoint_type} endpoints",
+                "retry_after": rate_info.get("retry_after", 60),
+                "limit": rate_info.get("limit"),
+                "window": rate_info.get("window")
+            }
+
+            headers = {
+                "X-RateLimit-Limit": str(rate_info.get("limit", 0)),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": str(rate_info.get("reset_time", int(time.time() + 3600))),
+                "Retry-After": str(rate_info.get("retry_after", 60))
+            }
+
+            return JSONResponse(
+                status_code=429,
+                content=response_data,
+                headers=headers
+            )
+
+        # Request allowed, proceed
+        response = await call_next(request)
+
+        # Add rate limit headers to successful responses
+        response.headers["X-RateLimit-Limit"] = str(rate_info.get("limit", 0))
+        response.headers["X-RateLimit-Remaining"] = str(rate_info.get("remaining", 0))
+        response.headers["X-RateLimit-Reset"] = str(rate_info.get("reset_time", int(time.time() + 3600)))
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Rate limiting error: {e}")
+        # On rate limiter failure, allow request but log error
+        return await call_next(request)
+
+
+# Background task to clean up rate limiter data
+async def cleanup_rate_limiters():
+    """Background task to clean up old rate limiter entries"""
+    while True:
+        try:
+            await asyncio.sleep(300)  # Clean up every 5 minutes
+
+            for limiter in [
+                RateLimitConfig.GENERAL,
+                RateLimitConfig.AI_GENERATION,
+                RateLimitConfig.AUTH,
+                RateLimitConfig.UPLOADS
+            ]:
+                await limiter.cleanup_old_entries()
+
+        except Exception as e:
+            logger.error(f"Rate limiter cleanup error: {e}")
+
+
+# Export all
+__all__ = [
+    'TokenBucketRateLimiter', 'RateLimitConfig', 'RateLimitExceeded',
+    'rate_limit_middleware', 'get_client_identifier', 'get_endpoint_type',
+    'cleanup_rate_limiters'
+]

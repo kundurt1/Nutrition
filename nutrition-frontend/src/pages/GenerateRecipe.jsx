@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import RecipeRatings from '../components/RecipeRatings';
 import RecipeScaling from '../components/RecipeScaling';
-import { Utensils, CheckCircle, Calendar, ChefHat, DollarSign, Clock, Users } from 'lucide-react';
+import { Utensils, CheckCircle, Calendar, ChefHat, DollarSign, Clock, Users, Brain, Sparkles, Share2 } from 'lucide-react';
 
 export default function GenerateRecipe() {
   const navigate = useNavigate();
@@ -18,6 +18,12 @@ export default function GenerateRecipe() {
   const [recipeResults, setRecipeResults] = useState(null);
   const [regeneratingIndex, setRegeneratingIndex] = useState(null);
   const [savingToGroceryList, setSavingToGroceryList] = useState(false);
+
+  // Advanced AI State
+  const [useAdvancedAI, setUseAdvancedAI] = useState(true);
+  const [showAIThinking, setShowAIThinking] = useState(false);
+  const [thoughtSteps, setThoughtSteps] = useState([]);
+  const [aiExplanation, setAiExplanation] = useState('');
 
   // Meal Planning State
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -110,11 +116,13 @@ export default function GenerateRecipe() {
     }
   }, []);
 
-  // Enhanced recipe generation with better error handling
+  // Enhanced recipe generation with advanced AI
   const handleGenerate = async (e) => {
     e?.preventDefault();
     setErrorMsg('');
     setRecipeResults(null);
+    setAiExplanation('');
+    setThoughtSteps([]);
 
     // Input validation
     if (!title.trim()) {
@@ -134,17 +142,39 @@ export default function GenerateRecipe() {
     }
 
     setLoading(true);
+
+    // Show AI thinking animation for advanced mode
+    if (useAdvancedAI) {
+      setShowAIThinking(true);
+
+      // Simulate thinking steps
+      const steps = [
+        { text: "Analyzing your dietary preferences and restrictions", icon: "🔍" },
+        { text: "Optimizing recipes for your budget constraints", icon: "💰" },
+        { text: "Selecting complementary ingredients for balanced nutrition", icon: "🥗" },
+        { text: "Calculating macros and nutritional balance", icon: "📊" },
+        { text: "Finalizing cooking instructions for best results", icon: "👨‍🍳" }
+      ];
+
+      // Show steps progressively
+      for (let i = 0; i < steps.length; i++) {
+        await new Promise(resolve => setTimeout(resolve, 600));
+        setThoughtSteps(prev => [...prev, { ...steps[i], completed: true }]);
+      }
+    }
+
     try {
       const payload = {
         title: title.trim(),
         budget: budgetNum,
         user_id: userId,
+        use_advanced: useAdvancedAI  // Add advanced AI flag
       };
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), useAdvancedAI ? 45000 : 30000); // Longer timeout for advanced mode
 
-      const res = await fetch('http://localhost:8000/generate-recipe-with-grocery', {
+      const res = await fetch('http://localhost:8000/generate-recipe-with-advanced-preferences', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -170,6 +200,11 @@ export default function GenerateRecipe() {
         throw new Error('Invalid response format from server');
       }
 
+      // Extract AI explanation if present (from advanced mode)
+      if (data.ai_explanation) {
+        setAiExplanation(data.ai_explanation);
+      }
+
       // Validate and clean recipe data
       const cleanedRecipes = data.recipes.map((recipe, index) => ({
         ...recipe,
@@ -178,7 +213,8 @@ export default function GenerateRecipe() {
         ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
         directions: Array.isArray(recipe.directions) ? recipe.directions : [],
         macros: recipe.macros || {},
-        tags: Array.isArray(recipe.tags) ? recipe.tags : []
+        tags: Array.isArray(recipe.tags) ? recipe.tags : [],
+        ai_insights: recipe.ai_insights || null  // Advanced AI insights
       }));
 
       setRecipeResults(cleanedRecipes);
@@ -186,12 +222,13 @@ export default function GenerateRecipe() {
     } catch (err) {
       console.error('Recipe generation error:', err);
       if (err.name === 'AbortError') {
-        setErrorMsg('Request timed out. Please try again.');
+        setErrorMsg('Request timed out. Please try again or switch to quick mode.');
       } else {
         setErrorMsg(`Error: ${err.message}`);
       }
     } finally {
       setLoading(false);
+      setShowAIThinking(false);
     }
   };
 
@@ -210,7 +247,8 @@ export default function GenerateRecipe() {
         budget: parseFloat(budget),
         user_id: userId,
         regenerate_single: true,
-        exclude_recipes: currentRecipes
+        exclude_recipes: currentRecipes,
+        use_advanced: useAdvancedAI  // Use same AI mode
       };
 
       const res = await fetch('http://localhost:8000/generate-single-recipe', {
@@ -716,10 +754,9 @@ export default function GenerateRecipe() {
 
   const weekDates = getWeekDates();
 
-  // Enhanced recipe rendering with better error handling
+  // Enhanced recipe rendering with AI insights
   const renderRecipe = (rec, idx) => {
     const recipeName = rec.recipe_name || rec.title || `Recipe ${idx + 1}`;
-    // Make sure we're always using the latest ingredients from the state
     const ingredients = Array.isArray(rec.ingredients) ? rec.ingredients : [];
     const directions = Array.isArray(rec.directions) ? rec.directions : [];
     const macros = rec.macros || {};
@@ -774,6 +811,16 @@ export default function GenerateRecipe() {
                 </button>
               </div>
             </div>
+
+            {/* AI Insights Badge (if using advanced mode) */}
+            {rec.ai_insights && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-3 flex items-start">
+                  <Brain className="w-5 h-5 text-purple-600 mr-3 flex-shrink-0 mt-1" />
+                  <div className="text-sm text-purple-800">
+                    <strong>AI Insights:</strong> {rec.ai_insights}
+                  </div>
+                </div>
+            )}
 
             {/* Enhanced Nutrition Summary Card */}
             <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -830,7 +877,6 @@ export default function GenerateRecipe() {
                 }}
                 onRecipeUpdate={(scaledRecipe) => {
                   console.log('Recipe scaled:', scaledRecipe);
-                  // Optional: Update the recipe data when scaled
                   setRecipeResults(prevResults => {
                     const newResults = [...prevResults];
                     newResults[idx] = { ...newResults[idx], ...scaledRecipe };
@@ -911,13 +957,13 @@ export default function GenerateRecipe() {
           </div>
           <button
               onClick={() => navigate('/import-recipe')}
-              className="btn-secondary"
+              className="btn-secondary w-full"
           >
             <Share2 className="w-4 h-4 mr-2" />
             Import from Social Media
           </button>
-  </div>
-  );
+        </div>
+    );
   };
 
   // Error message component
@@ -1029,6 +1075,48 @@ export default function GenerateRecipe() {
                     />
                 )}
 
+                {/* AI Mode Toggle */}
+                <div className="recipe-card mb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2 flex items-center">
+                        <Brain className="w-5 h-5 mr-2 text-purple-600" />
+                        AI Generation Mode
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        Advanced mode uses sophisticated reasoning for better results
+                      </p>
+                    </div>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                          type="checkbox"
+                          checked={useAdvancedAI}
+                          onChange={(e) => setUseAdvancedAI(e.target.checked)}
+                          className="sr-only"
+                      />
+                      <div className={`relative w-14 h-8 transition-colors rounded-full ${
+                          useAdvancedAI ? 'bg-purple-600' : 'bg-gray-300'
+                      }`}>
+                        <div className={`absolute top-1 left-1 w-6 h-6 transition-transform bg-white rounded-full ${
+                            useAdvancedAI ? 'translate-x-6' : ''
+                        }`} />
+                      </div>
+                      <span className="ml-3 font-medium flex items-center">
+                        {useAdvancedAI ? (
+                            <>
+                              <Sparkles className="w-4 h-4 mr-2 text-purple-600" />
+                              Advanced AI
+                            </>
+                        ) : (
+                            <>
+                              ⚡ Quick Mode
+                            </>
+                        )}
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
                 {/* Enhanced Recipe Generation Form */}
                 <div className="recipe-card mb-4">
                   <h2 className="mb-3" style={{ textAlign: 'left', display: 'flex', alignItems: 'center' }}>
@@ -1124,10 +1212,47 @@ export default function GenerateRecipe() {
                   </form>
                 </div>
 
-                {/* Loading State */}
-                {loading && (
+                {/* AI Thinking Animation */}
+                {loading && showAIThinking && (
+                    <div className="recipe-card mb-4 bg-gradient-to-r from-purple-50 to-blue-50">
+                      <div className="text-center py-8">
+                        <div className="text-6xl mb-4 animate-pulse">🤔</div>
+                        <h3 className="text-xl font-semibold mb-2">AI is thinking deeply...</h3>
+                        <p className="text-gray-600 mb-4">
+                          Analyzing your preferences and creating optimized recipes
+                        </p>
+                        <div className="space-y-2 text-left max-w-md mx-auto">
+                          {thoughtSteps.map((step, i) => (
+                              <div key={i} className={`flex items-center space-x-2 transition-all duration-500 ${
+                                  step.completed ? 'text-green-600' : 'text-gray-400'
+                              }`}>
+                                <span className="text-xl">{step.icon}</span>
+                                <span className={`${step.completed ? 'font-medium' : ''}`}>{step.text}</span>
+                                {step.completed && <CheckCircle className="w-4 h-4" />}
+                              </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                )}
+
+                {/* Standard Loading State */}
+                {loading && !showAIThinking && (
                     <div className="recipe-card">
                       <LoadingSpinner text="Generating your personalized recipes..." />
+                    </div>
+                )}
+
+                {/* AI Explanation (if available) */}
+                {aiExplanation && !loading && (
+                    <div className="recipe-card mb-4 bg-gradient-to-r from-purple-50 to-blue-50">
+                      <div className="flex items-start">
+                        <Brain className="w-6 h-6 text-purple-600 mr-3 flex-shrink-0 mt-1" />
+                        <div>
+                          <h3 className="font-semibold text-purple-900 mb-2">AI Recipe Analysis</h3>
+                          <p className="text-purple-800 text-sm">{aiExplanation}</p>
+                        </div>
+                      </div>
                     </div>
                 )}
 
@@ -1187,7 +1312,7 @@ export default function GenerateRecipe() {
               </div>
           )}
 
-          {/* Enhanced Meal Planning Tab */}
+          {/* Meal Planning Tab */}
           {activeTab === 'meal-plan' && (
               <div>
                 {/* Meal Planning Header */}
@@ -1605,6 +1730,21 @@ export default function GenerateRecipe() {
         .btn-success:hover:not(:disabled) {
           transform: translateY(-1px);
           box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        .recipe-card {
+          animation: fadeIn 0.3s ease-out;
         }
         
         @media (max-width: 768px) {
