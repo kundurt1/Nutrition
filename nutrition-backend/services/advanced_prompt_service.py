@@ -723,6 +723,179 @@ Final Adapted Recipe:
             "optimization_stats": self.get_optimization_stats()
         }
 
+    def _build_structured_prompt(self, context: PromptContext, num_recipes: int) -> str:
+        """Build structured prompt for recipe generation"""
+
+        template = """
+    You are NutriChef AI, an expert culinary AI specializing in personalized recipe generation.
+
+    USER PREFERENCES:
+    - Budget: ${budget}
+    - Diet: {diet}
+    - Allergies: {allergies}
+    - Dietary Restrictions: {restrictions}
+
+    TASK: Generate {num_recipes} unique recipes for "{title}"
+
+    For each recipe, provide:
+
+    RECIPE [NUMBER]: [Recipe Name]
+
+    Ingredients:
+    - [Quantity] [Unit] [Ingredient]
+    - [Continue for all ingredients]
+
+    Directions:
+    1. [Step 1]
+    2. [Step 2]
+    [Continue for all steps]
+
+    Nutrition (per serving):
+    - Calories: [number]
+    - Protein: [number]g
+    - Carbs: [number]g
+    - Fat: [number]g
+
+    Cost Estimate: $[number]
+    Prep Time: [time]
+    Cook Time: [time]
+    Difficulty: [Easy/Medium/Hard]
+
+    ---
+    [Separate each recipe with --- line]
+
+    Generate practical, delicious recipes that fit the user's preferences and budget.
+    """
+
+        # Extract data from context
+        prefs = context.user_preferences
+        constraints = context.constraints
+
+        # Format restrictions
+        restrictions = []
+        if prefs.get('dietary_restrictions'):
+            restrictions = [k for k, v in prefs['dietary_restrictions'].items() if v]
+
+        return template.format(
+            budget=prefs.get('budget', 20),
+            diet=prefs.get('diet', 'Any'),
+            allergies=prefs.get('allergies', 'None'),
+            restrictions=', '.join(restrictions) if restrictions else 'None',
+            num_recipes=num_recipes,
+            title=constraints.get('title', 'meal')
+        )
+
+    def _build_few_shot_prompt(self, context: PromptContext, num_recipes: int) -> str:
+        """Build few-shot prompt with examples"""
+
+        example = """
+    EXAMPLE RECIPE:
+
+    RECIPE 1: Mediterranean Chickpea Bowl
+
+    Ingredients:
+    - 1 cup chickpeas, cooked
+    - 2 tbsp olive oil
+    - 1 cup cucumber, diced
+    - 1/2 cup cherry tomatoes
+    - 1/4 cup red onion, sliced
+    - 2 tbsp feta cheese
+    - 1 tbsp lemon juice
+    - 1 tsp oregano
+
+    Directions:
+    1. Combine chickpeas with olive oil and oregano
+    2. Add vegetables and mix well
+    3. Top with feta and lemon juice
+    4. Serve immediately
+
+    Nutrition (per serving):
+    - Calories: 340
+    - Protein: 15g
+    - Carbs: 45g
+    - Fat: 12g
+
+    Cost Estimate: $4.50
+    Prep Time: 10 minutes
+    Cook Time: 0 minutes
+    Difficulty: Easy
+
+    ---
+
+    """
+
+        structured_prompt = self._build_structured_prompt(context, num_recipes)
+        return example + "\nNow create similar recipes following this format:\n\n" + structured_prompt
+
+    def _build_exploration_prompt(self, context: PromptContext, exploration_num: int) -> str:
+        """Build exploration prompt for tree of thoughts"""
+
+        angles = [
+            "Focus on maximum nutrition and health benefits",
+            "Emphasize bold flavors and unique ingredient combinations",
+            "Prioritize quick preparation and convenience"
+        ]
+
+        base_prompt = self._build_structured_prompt(context, 1)
+        angle = angles[exploration_num % len(angles)]
+
+        return f"EXPLORATION ANGLE: {angle}\n\n{base_prompt}"
+
+    def _build_synthesis_prompt(self, context: PromptContext) -> str:
+        """Build synthesis prompt to combine explorations"""
+
+        return """
+    Based on the previous explorations, create the optimal recipe that combines:
+    1. The best nutritional elements from the health-focused approach
+    2. The most appealing flavors from the bold flavor approach  
+    3. The practical preparation methods from the convenience approach
+
+    Generate one final, optimized recipe that balances all these aspects.
+    """
+
+    def _refine_prompt(self, original_prompt: str, previous_response: str) -> str:
+        """Refine prompt based on previous response"""
+
+        # Simple refinement - add context from previous response
+        refinement = f"\nBased on this previous analysis:\n{previous_response[:200]}...\n\n"
+        return refinement + original_prompt
+
+    def _enhance_with_analysis(self, recipes: str, analysis: str) -> str:
+        """Enhance recipes with analysis insights"""
+
+        return f"{recipes}\n\nNUTRITIONAL INSIGHTS:\n{analysis}"
+
+    def _enhance_with_explorations(self, synthesis: str, explorations: List[str]) -> str:
+        """Enhance synthesis with exploration insights"""
+
+        return synthesis
+
+    async def _execute_fallback_prompt(self, original_prompt: str) -> str:
+        """Execute simpler fallback prompt if main prompt fails"""
+
+        fallback = """
+    Generate a simple, healthy recipe with:
+    - Clear ingredient list
+    - Step-by-step directions
+    - Basic nutritional information
+    - Cost estimate under $15
+    """
+
+        try:
+            response = await self.client.chat.completions.create(
+                model="gpt-3.5-turbo",  # Use simpler model for fallback
+                messages=[
+                    {"role": "system", "content": "You are a helpful cooking assistant."},
+                    {"role": "user", "content": fallback}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Fallback prompt also failed: {e}")
+            return "Error: Unable to generate recipe. Please try again."
+
 
 # Global instance
 advanced_prompt_service = AdvancedPromptService()

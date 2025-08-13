@@ -158,25 +158,44 @@ def get_user_recipes(user_id: str, limit: int = 20, offset: int = 0):
             .execute()
 
         recipes = result.data or []
-
-        # Format recipes for frontend
         formatted_recipes = []
-        for recipe in recipes:
-            # Ensure cost_estimate is a number
+
+        json_fields = ["macro_estimate", "ingredients", "directions", "tags"]
+
+        for raw_recipe in recipes:
+            # Convert full recipe from JSON string to dict if needed
+            recipe = raw_recipe
+            if isinstance(recipe, str):
+                try:
+                    recipe = json.loads(recipe)
+                except json.JSONDecodeError:
+                    print(f"⚠️ Skipping invalid recipe JSON: {raw_recipe}")
+                    continue
+
+            # Ensure JSON fields are parsed correctly
+            for key in json_fields:
+                if isinstance(recipe.get(key), str):
+                    try:
+                        recipe[key] = json.loads(recipe[key])
+                    except json.JSONDecodeError:
+                        print(f"⚠️ Invalid JSON in field '{key}' for recipe {recipe.get('id')}")
+                        recipe[key] = [] if key != "macro_estimate" else {}
+
+            # Ensure cost_estimate is numeric
             cost_estimate = recipe.get("cost_estimate", 0)
             if isinstance(cost_estimate, str):
                 try:
                     cost_estimate = float(cost_estimate)
-                except:
+                except ValueError:
                     cost_estimate = 0.0
 
             formatted_recipe = {
-                "id": recipe["id"],
+                "id": recipe.get("id"),
                 "recipe_name": recipe.get("title", "Unknown Recipe"),
                 "title": recipe.get("title", "Unknown Recipe"),
                 "cuisine": recipe.get("cuisine", "Unknown"),
                 "cost_estimate": cost_estimate,
-                "cost": cost_estimate,  # Alias for consistency
+                "cost": cost_estimate,
                 "prep_time": recipe.get("prep_time", "30 min"),
                 "cook_time": recipe.get("cook_time", "20 min"),
                 "difficulty": recipe.get("difficulty", "Medium"),
@@ -188,6 +207,7 @@ def get_user_recipes(user_id: str, limit: int = 20, offset: int = 0):
                 "rating": 4.0,  # Default rating
                 "created_at": recipe.get("created_at")
             }
+
             formatted_recipes.append(formatted_recipe)
 
         print(f"✅ Retrieved {len(formatted_recipes)} recipes for user {user_id}")

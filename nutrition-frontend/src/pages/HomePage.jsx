@@ -38,44 +38,79 @@ export default function HomePage() {
   });
 
   // Daily nutrition goals
-  const dailyGoals = {
+  const [dailyGoals, setDailyGoals] = useState({
     calories: 2000,
     protein: 150,
     carbs: 200,
     fat: 70,
     fiber: 25,
     budget: 30
+  });
+  // Replace your existing fetchUserPreferences with this improved version
+  // 1) fetchUserPreferences: parse & don’t gate on enableTargets
+  const fetchUserPreferences = async (userId) => {
+    try {
+      const res = await fetch(`http://localhost:8000/get-preferences/${userId}`);
+      if (!res.ok) return false;
+
+      const data = await res.json();
+      const prefs = data?.preferences || {};
+
+      let macroTargets = null;
+
+      if (prefs.macro_targets) {
+        try {
+          macroTargets = typeof prefs.macro_targets === 'string'
+              ? JSON.parse(prefs.macro_targets)   // <— parse JSON string
+              : prefs.macro_targets;
+        } catch (e) {
+          console.warn('Invalid macro_targets JSON:', e);
+        }
+      }
+
+      // Fallback from individual columns
+      if (!macroTargets && (prefs.daily_calories || prefs.daily_protein || prefs.daily_carbs || prefs.daily_fat || prefs.daily_fiber)) {
+        macroTargets = {
+          calories: prefs.daily_calories,
+          protein: prefs.daily_protein,
+          carbs:   prefs.daily_carbs,
+          fat:     prefs.daily_fat,
+          fiber:   prefs.daily_fiber
+        };
+      }
+
+      if (macroTargets) {
+        const newGoals = {
+          calories: Number(macroTargets.calories) || 2000,
+          protein:  Number(macroTargets.protein)  || 150,
+          carbs:    Number(macroTargets.carbs)    || 200,
+          fat:      Number(macroTargets.fat)      || 70,
+          fiber:    Number(macroTargets.fiber)    || 25,
+          budget:   Number(prefs.budget) ?? 30
+        };
+        setDailyGoals(newGoals);
+        return newGoals; // <— return so caller can use immediately
+      }
+
+      // No macros found; still update budget if present
+      if (prefs.budget != null) {
+        setDailyGoals(prev => ({ ...prev, budget: Number(prefs.budget) }));
+      }
+      return null;
+    } catch (err) {
+      console.error('Error fetching user preferences:', err);
+      return null;
+    }
   };
 
-  useEffect(() => {
-    const checkUserAndFetchData = async () => {
-      try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-        if (userError || !user) {
-          console.log('No authenticated user, redirecting to sign in');
-          navigate('/');
-          return;
-        }
-
-        setUser(user);
-        await fetchUserStats(user.id);
-
-      } catch (error) {
-        console.error('Error checking user:', error);
-        navigate('/');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkUserAndFetchData();
-  }, [navigate]);
-
-  const fetchUserStats = async (userId) => {
+  const fetchUserStats = async (userId, goalsOverride = null) => {
     try {
       setNutritionLoading(true);
       setErrors({});
+
+      // Use the latest goals passed in (from fetchUserPreferences) or fall back to state
+      const goals = goalsOverride || dailyGoals;
 
       // Fetch recent recipes from Supabase
       let recipes = [];
@@ -138,7 +173,9 @@ export default function HomePage() {
       try {
         // Fetch today's nutrition data
         const today = new Date().toISOString().split('T')[0];
-        const todayResponse = await fetch(`http://localhost:8000/daily-nutrition?user_id=${userId}&date=${today}`);
+        const todayResponse = await fetch(
+            `http://localhost:8000/daily-nutrition?user_id=${userId}&date=${today}`
+        );
 
         if (todayResponse.ok) {
           const todayData = await todayResponse.json();
@@ -150,19 +187,21 @@ export default function HomePage() {
           nutritionData.todayFat = todayTotals.fat;
           nutritionData.todayFiber = todayTotals.fiber;
           nutritionData.todayCost = todayTotals.cost;
-          nutritionData.todayEntries = todayData.logs.length;
+          nutritionData.todayEntries = (todayData.logs || []).length;
         } else {
           console.log(`Failed to fetch today's nutrition: ${todayResponse.status}`);
-          setErrors(prev => ({ ...prev, todayNutrition: 'Failed to load today\'s nutrition data' }));
+          setErrors(prev => ({ ...prev, todayNutrition: "Failed to load today's nutrition data" }));
         }
       } catch (nutritionError) {
-        console.log('Could not fetch today\'s nutrition data:', nutritionError);
+        console.log("Could not fetch today's nutrition data:", nutritionError);
         setErrors(prev => ({ ...prev, todayNutrition: 'Nutrition service unavailable' }));
       }
 
       try {
         // Fetch weekly nutrition summary
-        const weeklyResponse = await fetch(`http://localhost:8000/weekly-nutrition-summary/${userId}?days=7`);
+        const weeklyResponse = await fetch(
+            `http://localhost:8000/weekly-nutrition-summary/${userId}?days=7`
+        );
 
         if (weeklyResponse.ok) {
           const weeklyData = await weeklyResponse.json();
@@ -183,7 +222,9 @@ export default function HomePage() {
 
       try {
         // Fetch nutrition summary for cuisines
-        const summaryResponse = await fetch(`http://localhost:8000/nutrition-summary?user_id=${userId}`);
+        const summaryResponse = await fetch(
+            `http://localhost:8000/nutrition-summary?user_id=${userId}`
+        );
 
         if (summaryResponse.ok) {
           const summaryData = await summaryResponse.json();
@@ -197,18 +238,22 @@ export default function HomePage() {
         console.log('Could not fetch nutrition summary:', nutritionError);
       }
 
-      // Calculate goal progress
+      // Calculate goal progress using the override (or current state)
+      const safeDiv = (num, den) => (den > 0 ? num / den : 0);
+
       nutritionData.goalProgress = {
-        calories: Math.min((nutritionData.todayCalories / dailyGoals.calories) * 100, 100),
-        protein: Math.min((nutritionData.todayProtein / dailyGoals.protein) * 100, 100),
-        carbs: Math.min((nutritionData.todayCarbs / dailyGoals.carbs) * 100, 100),
-        fat: Math.min((nutritionData.todayFat / dailyGoals.fat) * 100, 100)
+        calories: Math.min(safeDiv(nutritionData.todayCalories, goals.calories) * 100, 100),
+        protein:  Math.min(safeDiv(nutritionData.todayProtein,  goals.protein)  * 100, 100),
+        carbs:    Math.min(safeDiv(nutritionData.todayCarbs,    goals.carbs)    * 100, 100),
+        fat:      Math.min(safeDiv(nutritionData.todayFat,      goals.fat)      * 100, 100)
       };
 
       // Fetch favorites count
       let favoritesCount = 0;
       try {
-        const favoritesResponse = await fetch(`http://localhost:8000/favorites/${userId}?limit=5`);
+        const favoritesResponse = await fetch(
+            `http://localhost:8000/favorites/${userId}?limit=5`
+        );
         if (favoritesResponse.ok) {
           const favoritesData = await favoritesResponse.json();
           favoritesCount = favoritesData.total_count || 0;
@@ -230,6 +275,8 @@ export default function HomePage() {
         nutritionData
       });
 
+      // (optional) return what we used to compute progress
+      return { goalsUsed: goals, nutritionData };
     } catch (error) {
       console.error('Error fetching stats:', error);
       setErrors(prev => ({ ...prev, general: 'Failed to load dashboard data' }));
@@ -237,6 +284,36 @@ export default function HomePage() {
       setNutritionLoading(false);
     }
   };
+// Replace your existing useEffect with this
+  useEffect(() => {
+    const run = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) { navigate('/'); return; }
+      setUser(user);
+
+      const newGoals = await fetchUserPreferences(user.id);
+      await fetchUserStats(user.id, newGoals || undefined); // <— pass them in
+      setLoading(false);
+    };
+    run();
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!user) return;
+    // Recompute goalProgress using the latest goals and today’s numbers
+    setStats(prev => ({
+      ...prev,
+      nutritionData: {
+        ...prev.nutritionData,
+        goalProgress: {
+          calories: Math.min((prev.nutritionData.todayCalories / dailyGoals.calories) * 100, 100),
+          protein:  Math.min((prev.nutritionData.todayProtein  / dailyGoals.protein)  * 100, 100),
+          carbs:    Math.min((prev.nutritionData.todayCarbs    / dailyGoals.carbs)    * 100, 100),
+          fat:      Math.min((prev.nutritionData.todayFat      / dailyGoals.fat)      * 100, 100),
+        }
+      }
+    }));
+  }, [dailyGoals, user]);
 
   const calculateDayTotals = (logs) => {
     const totals = {
@@ -268,7 +345,6 @@ export default function HomePage() {
 
     return totals;
   };
-
   const addRecipeToNutritionLog = async (recipe, recipeIndex) => {
     if (!user) {
       alert('Please sign in to track nutrition');
@@ -278,15 +354,18 @@ export default function HomePage() {
     setAddingToNutrition(prev => ({ ...prev, [recipeIndex]: true }));
 
     try {
+      // FIX: Use 'macros' instead of 'macro_estimate' and handle both
+      const macros = recipe.macro_estimate || recipe.macros || {
+        calories: 450,
+        protein: '25g',
+        carbs: '35g',
+        fat: '15g',
+        fiber: '5g'
+      };
+
       const recipeData = {
         recipe_name: recipe.title || `Recipe ${recipeIndex + 1}`,
-        macros: recipe.macro_estimate || {
-          calories: 450,
-          protein: '25g',
-          carbs: '35g',
-          fat: '15g',
-          fiber: '5g'
-        },
+        macros: macros,  // Use 'macros' key consistently
         cost_estimate: recipe.cost_estimate || 8.50,
         cuisine: recipe.cuisine || 'Unknown',
         ingredients: recipe.ingredients || [],
@@ -307,11 +386,11 @@ export default function HomePage() {
         const notification = document.createElement('div');
         notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center';
         notification.innerHTML = `
-          <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-          </svg>
-          Added "${recipeData.recipe_name}" to nutrition log!
-        `;
+        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+        </svg>
+        Added "${recipeData.recipe_name}" to nutrition log!
+      `;
         document.body.appendChild(notification);
 
         setTimeout(() => {
@@ -754,46 +833,50 @@ export default function HomePage() {
                           </div>
 
                           {/* Nutrition Preview */}
-                          {macros && Object.keys(macros).length > 0 && (
-                              <div style={{
-                                background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-                                padding: '16px',
-                                borderRadius: '12px',
-                                marginBottom: '16px',
-                                border: '1px solid #dee2e6'
-                              }}>
+                          {(() => {
+                            // FIX: Handle both macro_estimate and macros
+                            const macros = recipe.macro_estimate || recipe.macros || {};
+                            return macros && Object.keys(macros).length > 0 && (
                                 <div style={{
-                                  fontSize: '0.8rem',
-                                  fontWeight: '700',
-                                  color: '#495057',
-                                  marginBottom: '10px',
-                                  textAlign: 'center'
+                                  background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+                                  padding: '16px',
+                                  borderRadius: '12px',
+                                  marginBottom: '16px',
+                                  border: '1px solid #dee2e6'
                                 }}>
-                                  Nutrition Info
+                                  <div style={{
+                                    fontSize: '0.8rem',
+                                    fontWeight: '700',
+                                    color: '#495057',
+                                    marginBottom: '10px',
+                                    textAlign: 'center'
+                                  }}>
+                                    Nutrition Info
+                                  </div>
+                                  <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(2, 1fr)',
+                                    gap: '8px',
+                                    fontSize: '0.75rem',
+                                    color: '#6c757d',
+                                    textAlign: 'center'
+                                  }}>
+                                    <div style={{ fontWeight: '600' }}>
+                                      <strong style={{ color: '#667eea' }}>{macros.calories || 450}</strong> cal
+                                    </div>
+                                    <div style={{ fontWeight: '600' }}>
+                                      <strong style={{ color: '#f5576c' }}>{String(macros.protein || '25g').replace('g', '')}g</strong> protein
+                                    </div>
+                                    <div style={{ fontWeight: '600' }}>
+                                      <strong style={{ color: '#4ade80' }}>{String(macros.carbs || '35g').replace('g', '')}g</strong> carbs
+                                    </div>
+                                    <div style={{ fontWeight: '600' }}>
+                                      <strong style={{ color: '#facc15' }}>{String(macros.fat || '15g').replace('g', '')}g</strong> fat
+                                    </div>
+                                  </div>
                                 </div>
-                                <div style={{
-                                  display: 'grid',
-                                  gridTemplateColumns: 'repeat(2, 1fr)',
-                                  gap: '8px',
-                                  fontSize: '0.75rem',
-                                  color: '#6c757d',
-                                  textAlign: 'center'
-                                }}>
-                                  <div style={{ fontWeight: '600' }}>
-                                    <strong style={{ color: '#667eea' }}>{macros.calories || 450}</strong> cal
-                                  </div>
-                                  <div style={{ fontWeight: '600' }}>
-                                    <strong style={{ color: '#f5576c' }}>{String(macros.protein || '25g').replace('g', '')}g</strong> protein
-                                  </div>
-                                  <div style={{ fontWeight: '600' }}>
-                                    <strong style={{ color: '#00f2fe' }}>{String(macros.carbs || '35g').replace('g', '')}g</strong> carbs
-                                  </div>
-                                  <div style={{ fontWeight: '600' }}>
-                                    <strong style={{ color: '#fee140' }}>{String(macros.fat || '15g').replace('g', '')}g</strong> fat
-                                  </div>
-                                </div>
-                              </div>
-                          )}
+                            );
+                          })()}
 
                           {/* Action Buttons */}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

@@ -12,6 +12,7 @@ import NutritionPage from './pages/NutritionPage';
 // NEW IMPORTS - Add these for AI Nutrition Coach
 import NutritionCoachPage from './pages/NutritionCoachPage';
 import FitnessAssessment from './components/FitnessAssessment';
+import SocialMediaImport from "./components/SocialMediaImport.jsx";
 
 export default function AppRoutes() {
     return (
@@ -89,6 +90,14 @@ export default function AppRoutes() {
                 element={
                     <RequireAuth>
                         <FitnessAssessment />
+                    </RequireAuth>
+                }
+            />
+            <Route
+                path="/social-media"
+                element={
+                    <RequireAuth>
+                        <SocialMediaImport />
                     </RequireAuth>
                 }
             />

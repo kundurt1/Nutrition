@@ -1,4 +1,3 @@
-# database.py - Fixed compatible version
 from supabase import create_client, Client
 import os
 import asyncio
@@ -6,16 +5,37 @@ import time
 import random
 from functools import wraps
 from dotenv import load_dotenv
+from pathlib import Path
 
-# Load environment variables
-load_dotenv()
+# CRITICAL: Load .env file from the correct location
+# Try multiple paths to find the .env file
+env_paths = [
+    Path('.env'),  # Current directory
+    Path('nutrition-backend/.env'),  # If running from parent directory
+    Path('../.env'),  # If running from subdirectory
+    Path(__file__).parent / '.env'  # Same directory as this file
+]
 
+for env_path in env_paths:
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"✅ Loaded .env from: {env_path}")
+        break
+else:
+    print("⚠️ No .env file found, using system environment variables")
+    load_dotenv()  # Try system env vars
+
+# Try both variable names for compatibility
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
 
 # Debug prints to help diagnose issues
 print(f"Supabase URL loaded: {'Yes' if SUPABASE_URL else 'No'}")
+if SUPABASE_URL:
+    print(f"  URL starts with: {SUPABASE_URL[:30]}...")
 print(f"Supabase Key loaded: {'Yes' if SUPABASE_KEY else 'No'}")
+if SUPABASE_KEY:
+    print(f"  Key length: {len(SUPABASE_KEY)} characters")
 
 
 # Connection retry decorator
@@ -32,12 +52,8 @@ def retry_on_connection_error(max_retries=3, base_delay=0.1):
                     error_msg = str(e).lower()
                     connection_errors = [
                         'resource temporarily unavailable',
-                        'connection',
-                        'timeout',
-                        'network',
-                        'temporary failure',
-                        'server error',
-                        'errno 35'
+                        'connection', 'timeout', 'network',
+                        'temporary failure', 'server error', 'errno 35'
                     ]
 
                     if any(err in error_msg for err in connection_errors):
@@ -59,12 +75,8 @@ def retry_on_connection_error(max_retries=3, base_delay=0.1):
                     error_msg = str(e).lower()
                     connection_errors = [
                         'resource temporarily unavailable',
-                        'connection',
-                        'timeout',
-                        'network',
-                        'temporary failure',
-                        'server error',
-                        'errno 35'
+                        'connection', 'timeout', 'network',
+                        'temporary failure', 'server error', 'errno 35'
                     ]
 
                     if any(err in error_msg for err in connection_errors):
@@ -77,7 +89,6 @@ def retry_on_connection_error(max_retries=3, base_delay=0.1):
                     raise e
             return None
 
-        # Return appropriate wrapper based on whether function is async
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
         else:
@@ -87,14 +98,14 @@ def retry_on_connection_error(max_retries=3, base_delay=0.1):
 
 
 class SupabaseWrapper:
-    """Simple wrapper for Supabase client with retry functionality"""
+    """Wrapper class for Supabase client with retry logic"""
 
     def __init__(self, client: Client):
         self._client = client
 
-    @retry_on_connection_error(max_retries=3, base_delay=0.2)
+    @retry_on_connection_error(max_retries=3)
     def table(self, table_name: str):
-        """Get table with retry logic"""
+        """Get table reference with retry logic"""
         return self._client.table(table_name)
 
     @retry_on_connection_error(max_retries=3)
@@ -136,22 +147,16 @@ if SUPABASE_URL and SUPABASE_KEY:
 
     except Exception as e:
         print(f"❌ Error initializing Supabase: {e}")
+        print("Please check your SUPABASE_URL and SUPABASE_KEY in .env file")
         supabase = None
 else:
     print("⚠️ Supabase credentials missing - database features disabled")
+    print("\n📝 Please create a .env file in nutrition-backend/ with:")
+    print("SUPABASE_URL=your-supabase-url")
+    print("SUPABASE_SERVICE_KEY=your-service-key")
+    print("SUPABASE_KEY=your-anon-key")
+    print("OPENAI_API_KEY=your-openai-key")
     supabase = None
 
-
-# Utility functions for database operations
-@retry_on_connection_error(max_retries=3)
-def safe_db_operation(operation_func, *args, **kwargs):
-    """Wrapper for safe database operations with automatic retry"""
-    try:
-        return operation_func(*args, **kwargs)
-    except Exception as e:
-        print(f"❌ Database operation failed: {e}")
-        raise e
-
-
 # Export the client
-__all__ = ['supabase', 'retry_on_connection_error', 'safe_db_operation']
+__all__ = ['supabase', 'retry_on_connection_error']

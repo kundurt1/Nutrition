@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from './services/supabase';
 import {
     Upload, Link, Camera, ChefHat, DollarSign, Clock,
     Zap, Heart, TrendingUp, Loader2, Check, X,

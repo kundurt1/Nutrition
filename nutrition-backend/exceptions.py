@@ -8,7 +8,10 @@ from typing import Dict, Any, Optional, Union
 from enum import Enum
 import asyncio
 
+
 logger = logging.getLogger(__name__)
+
+
 
 
 class ErrorCategory(Enum):
@@ -192,6 +195,21 @@ class NetworkError(NutritionAppException):
             details=details
         )
 
+class OpenAIServiceError(ExternalServiceError):
+    """OpenAI-specific service error"""
+
+    def __init__(self, message: str, error_code: str = None, model: str = None):
+        details = {}
+        if error_code:
+            details['error_code'] = error_code
+        if model:
+            details['model'] = model
+
+        super().__init__(
+            message=message,
+            service='openai',
+            error_code=error_code
+        )
 
 # Error Handler Classes
 
@@ -561,50 +579,16 @@ class ExternalServiceErrorContext:
 # Utility Functions
 
 def safe_operation(operation_name: str):
-    """Decorator for safe operation execution"""
+    """Decorator for safe operation execution - FIXED for FastAPI compatibility"""
 
-    def decorator(func):
-        if asyncio.iscoroutinefunction(func):
-            async def async_wrapper(*args, **kwargs):
-                try:
-                    return await func(*args, **kwargs)
-                except NutritionAppException:
-                    # Re-raise our custom exceptions
-                    raise
-                except Exception as e:
-                    # Convert unknown exceptions
-                    logger.error(f"Error in {operation_name}: {e}", exc_info=True)
-                    raise NutritionAppException(
-                        f"Error in {operation_name}",
-                        category=ErrorCategory.SYSTEM
-                    ) from e
-
-            return async_wrapper
-        else:
-            def sync_wrapper(*args, **kwargs):
-                try:
-                    return func(*args, **kwargs)
-                except NutritionAppException:
-                    # Re-raise our custom exceptions
-                    raise
-                except Exception as e:
-                    # Convert unknown exceptions
-                    logger.error(f"Error in {operation_name}: {e}", exc_info=True)
-                    raise NutritionAppException(
-                        f"Error in {operation_name}",
-                        category=ErrorCategory.SYSTEM
-                    ) from e
-
-            return sync_wrapper
-
-    return decorator
 
 
 # Export all
 __all__ = [
     # Exception classes
     'NutritionAppException', 'ValidationError', 'DatabaseError', 'ExternalServiceError',
-    'AuthenticationError', 'AuthorizationError', 'BusinessLogicError', 'TimeoutError', 'NetworkError',
+    'AuthenticationError', 'AuthorizationError', 'BusinessLogicError', 'TimeoutError', 'NetworkError','OpenAIServiceError',
+
 
     # Error handling
     'ErrorHandler', 'ErrorCategory',

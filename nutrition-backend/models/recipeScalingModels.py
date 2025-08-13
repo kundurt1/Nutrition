@@ -1,78 +1,66 @@
-# models/recipeScalingModels.py - Updated with flexible time validation
-
-from pydantic import BaseModel, Field, validator
-from typing import Optional, List, Dict, Any, Union
+from pydantic import BaseModel, Field
+from pydantic import field_validator  # pydantic v2
+from typing import Optional, List, Dict, Any
 import re
 
+# ---------- Base models ----------
 
-# Base models
-class RecipeIngredient(BaseModel):
+class Ingredients(BaseModel):
     name: str
-    quantity: float
-    unit: str
-    cost_per_unit: Optional[float] = 0
-    category: Optional[str] = "other"
+    quantity: Optional[float] = Field(default=None)
+    unit: Optional[str] = Field(default=None)
+    cost_per_unit: Optional[float] = Field(default=None)
 
-
-class RecipeScaling(BaseModel):
-    name: str
-    original_servings: int
-    ingredients: List[RecipeIngredient]
-    instructions: List[str]
-    prep_time: int = Field(default=0, description="Prep time in minutes")
-    cook_time: int = Field(default=0, description="Cook time in minutes")
-    cuisine: Optional[str] = ""
-    difficulty: Optional[str] = "medium"
-    tags: Optional[List[str]] = []
-    macros: Optional[Dict[str, Any]] = {}
+class RecipeModel(BaseModel):
+    recipe_name: str
+    ingredients: List[Ingredients] = []     # always objects
+    directions: List[str] = []
+    servings: Optional[int] = 4
     cost_estimate: Optional[float] = 0
+    macros: Optional[Dict[str, Any]] = None
+    cuisine: Optional[str] = None
+    difficulty: Optional[str] = None
+    # If you need times, define them here and validate here (not on the response)
+    prep_time: Optional[int] = None
+    cook_time: Optional[int] = None
 
-    @validator('prep_time', 'cook_time', pre=True)
+    @field_validator('prep_time', 'cook_time', mode='before')
+    @classmethod
     def parse_time_values(cls, v):
-        """Parse time values that might be strings like '15 minutes' or integers"""
+        # Accept int, or strings like '15 minutes', '1 hour', '45 min', etc.
+        if v is None:
+            return None
         if isinstance(v, int):
             return v
-
         if isinstance(v, str):
-            # Handle empty strings
-            if not v.strip():
-                return 30  # Default to 30 minutes for empty strings
+            s = v.strip().lower()
+            if not s:
+                return None
+            # hours
+            m = re.search(r'(\d+(?:\.\d+)?)\s*(?:hour|hr|hrs)', s)
+            if m:
+                return int(float(m.group(1)) * 60)
+            # minutes
+            m = re.search(r'(\d+(?:\.\d+)?)\s*(?:minute|min|mins)', s)
+            if m:
+                return int(float(m.group(1)))
+            # bare number
+            m = re.search(r'(\d+(?:\.\d+)?)', s)
+            if m:
+                return int(float(m.group(1)))
+        return None
 
-            # Remove extra spaces and convert to lowercase
-            time_str = v.strip().lower()
+# ---------- Request models ----------
 
-            # Try to extract numbers from strings like "15 minutes", "1 hour", etc.
-            if 'hour' in time_str:
-                hours = re.findall(r'(\d+(?:\.\d+)?)\s*(?:hour|hr)', time_str)
-                if hours:
-                    return int(float(hours[0]) * 60)
-
-            if 'min' in time_str:
-                minutes = re.findall(r'(\d+(?:\.\d+)?)\s*(?:minute|min)', time_str)
-                if minutes:
-                    return int(float(minutes[0]))
-
-            # Try to extract just numbers
-            numbers = re.findall(r'(\d+(?:\.\d+)?)', time_str)
-            if numbers:
-                return int(float(numbers[0]))
-
-        # Default fallback for None or other types
-        return 30
-
-
-# Request models
 class ScaleRecipeRequest(BaseModel):
     recipe_name: str
     new_servings: int = Field(gt=0, description="Must be greater than 0")
     user_id: str
 
-
 class ConvertUnitsRequest(BaseModel):
     recipe_name: str
     unit_conversions: Dict[str, str]  # ingredient_name -> new_unit
     user_id: str
-
 
 class GroceryListRequest(BaseModel):
     recipe_name: str
@@ -80,51 +68,46 @@ class GroceryListRequest(BaseModel):
     user_id: str
     preferred_units: Optional[Dict[str, str]] = {}
 
-
 class CombinedGroceryListRequest(BaseModel):
     recipe_servings: Dict[str, int]  # recipe_name -> servings
     user_id: str
     preferred_units: Optional[Dict[str, str]] = {}
-
 
 class NutritionComparisonRequest(BaseModel):
     recipe_name: str
     serving_sizes: List[int] = Field(description="List of serving sizes to compare")
     user_id: str
 
-    @validator('serving_sizes')
-    def validate_serving_sizes(cls, v):
-        if not v or len(v) == 0:
+    @field_validator('serving_sizes')
+    @classmethod
+    def validate_serving_sizes(cls, v: List[int]):
+        if not v:
             raise ValueError("Must provide at least one serving size")
-        for size in v:
-            if size <= 0:
-                raise ValueError("All serving sizes must be greater than 0")
+        if any(size <= 0 for size in v):
+            raise ValueError("All serving sizes must be greater than 0")
         return v
-
 
 class OptimizeServingsRequest(BaseModel):
     recipe_name: str
     target_calories_per_serving: int = Field(gt=0, description="Target calories per serving")
     user_id: str
 
-
 class BatchScaleRequest(BaseModel):
     recipe_names: List[str] = Field(min_items=1, description="At least one recipe name required")
     new_servings: int = Field(gt=0, description="Must be greater than 0")
     user_id: str
-
 
 class ImportRecipeRequest(BaseModel):
     recipe_data: Dict[str, Any]
     user_id: str
     save_to_db: bool = True
 
-
 class ExportRecipeRequest(BaseModel):
     recipe_name: str
     user_id: str
+    # If you’re on Pydantic v2, prefer using a Literal or constr with regex.
+    # Keeping this to minimize blast radius:
     format: str = Field(default="json", pattern="^(json|pdf|txt)$")
-
 
 class SearchRecipesRequest(BaseModel):
     user_id: str
@@ -134,25 +117,22 @@ class SearchRecipesRequest(BaseModel):
     tag: Optional[str] = ""
     max_cook_time: Optional[int] = None
 
-
 class UnitConversionRequest(BaseModel):
     quantity: float = Field(gt=0, description="Quantity must be positive")
     from_unit: str
     to_unit: str
 
-
 class RecipeAnalyticsRequest(BaseModel):
     recipe_name: str
     user_id: str
 
+# ---------- Response models ----------
 
-# Response models
 class ScaledRecipeResponse(BaseModel):
-    recipe: RecipeScaling
+    recipe: RecipeModel               # ✅ use the defined model
     scaling_factor: float
     original_servings: int
     new_servings: int
-
 
 class GroceryListResponse(BaseModel):
     grocery_list: List[Dict[str, Any]]
@@ -160,11 +140,9 @@ class GroceryListResponse(BaseModel):
     total_items: int
     servings: int
 
-
 class NutritionComparisonResponse(BaseModel):
     comparisons: Dict[str, Dict[str, Any]]
     recipe_name: str
-
 
 class RecipeAnalyticsResponse(BaseModel):
     recipe_name: str
@@ -177,7 +155,6 @@ class RecipeAnalyticsResponse(BaseModel):
     ingredient_categories: List[str]
     ingredient_count: int
     cost_per_calorie: float
-
 
 class UnitConversionResponse(BaseModel):
     original_quantity: float

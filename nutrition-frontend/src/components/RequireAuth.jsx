@@ -1,4 +1,3 @@
-// src/components/RequireAuth.jsx
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { Navigate, useLocation } from 'react-router-dom';
@@ -32,9 +31,9 @@ export default function RequireAuth({ children }) {
   // If session is still loading, show a loading indicator
   if (loading) {
     return (
-      <div className="card">
-        <p>Loading...</p>
-      </div>
+        <div className="card">
+          <p>Loading...</p>
+        </div>
     );
   }
 

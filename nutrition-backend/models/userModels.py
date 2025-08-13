@@ -16,4 +16,5 @@ class CustomEntryRequest(BaseModel):
     carbs: Optional[float] = Field(0, ge=0, description="Carbs in grams")
     fat: Optional[float] = Field(0, ge=0, description="Fat in grams")
     servings: Optional[float] = Field(1, gt=0, description="Number of servings")
+    fiber: Optional[float] = Field(0, ge=0, description="Fiber in grams")
     date: Optional[str] = Field(None, description="Date to log (YYYY-MM-DD)")

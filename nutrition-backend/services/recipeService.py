@@ -4,15 +4,15 @@ from fractions import Fraction
 from typing import List, Optional
 from datetime import datetime
 
-from models.recipe_models import RecipeRequest, SingleRecipeRequest
-from services.openai_service import OpenAIService
-from utils.ingredient_parser import IngredientParser
-from utils.price_calculator import PriceCalculator
+from models.recipeModels  import RecipeRequest
+from services.enhanced_openai_service import enhanced_openai_service as openai_service
+from utils.ingredientParser import IngredientParser
+from utils.priceCalculator import PriceCalculator
 from database import supabase
 
 class RecipeService:
     def __init__(self):
-        self.openai_service = OpenAIService()
+        self.openai_service = openai_service()
         self.ingredient_parser = IngredientParser()
         self.price_calculator = PriceCalculator()
 
@@ -34,7 +34,7 @@ class RecipeService:
         
         return {"recipes": parsed_recipes}
 
-    async def generate_single_recipe(self, req: SingleRecipeRequest):
+    async def generate_single_recipe(self, req: RecipeRequest):
         """Generate a single recipe for regeneration"""
         user_preferences = await self._get_user_preferences(req.user_id)
         

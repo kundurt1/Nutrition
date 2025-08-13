@@ -14,7 +14,7 @@ from models.recipeScalingModels import (
     CombinedGroceryListRequest, NutritionComparisonRequest, NutritionComparisonResponse,
     OptimizeServingsRequest, BatchScaleRequest, ImportRecipeRequest,
     ExportRecipeRequest, SearchRecipesRequest, UnitConversionRequest,
-    UnitConversionResponse, RecipeAnalyticsRequest, RecipeAnalyticsResponse
+    UnitConversionResponse, RecipeAnalyticsRequest, RecipeAnalyticsResponse, Ingredients
 )
 from services.recipe_scaler import RecipeScalerService
 from services.unit_converter import UnitConverterService
@@ -44,7 +44,7 @@ async def scale_recipe(request: ScaleRecipeRequest):
         raise HTTPException(status_code=500, detail=f"Error scaling recipe: {str(e)}")
 
 
-@router.post("/convert-units")
+@router.post("/convert-recipe-units")   # ✅ renamed from /convert-units to avoid collision
 async def convert_recipe_units(request: ConvertUnitsRequest):
     """Convert ingredients in a recipe to different units"""
     try:
@@ -53,14 +53,24 @@ async def convert_recipe_units(request: ConvertUnitsRequest):
             request.unit_conversions,
             request.user_id
         )
-
         if not success:
             raise HTTPException(status_code=404, detail="Recipe not found or conversion failed")
-
         return {"success": True, "message": "Units converted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error converting units: {str(e)}")
 
+@router.post("/convert-units", response_model=UnitConversionResponse)   # ✅ kept for single conversions
+async def convert_units(request: UnitConversionRequest):
+    """Convert between units"""
+    try:
+        result = unit_converter_service.convert_units(
+            request.quantity,
+            request.from_unit,
+            request.to_unit
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error converting units: {str(e)}")
 
 @router.post("/grocery-list", response_model=GroceryListResponse)
 async def generate_grocery_list(request: GroceryListRequest):

@@ -1,55 +1,100 @@
-// nutrition-frontend/src/components/RecipeScaling.jsx
-
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 
 const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
-    const [userId, setUserId] = useState(null);
-    const [servings, setServings] = useState(recipe?.original_servings || 4);
+    const [userId, setUserId] = useState(null);  // Start with null instead of test user
+    const [servings, setServings] = useState(recipe?.servings || recipe?.original_servings || 4);
     const [scaledRecipe, setScaledRecipe] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
     const [nutritionComparison, setNutritionComparison] = useState(null);
     const [showUnitConverter, setShowUnitConverter] = useState(false);
     const [unitConversions, setUnitConversions] = useState({});
     const [groceryList, setGroceryList] = useState(null);
     const [analytics, setAnalytics] = useState(null);
 
+    // Fetch the real user ID from Supabase auth
     useEffect(() => {
         const fetchUser = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) setUserId(user.id);
+            try {
+                const { data: { user }, error } = await supabase.auth.getUser();
+                if (error) {
+                    console.error('Error fetching user:', error);
+                    setError('Please log in to use recipe scaling');
+                    return;
+                }
+                if (user) {
+                    console.log('User authenticated:', user.id);
+                    setUserId(user.id);
+                } else {
+                    console.log('No user found - user needs to log in');
+                    setError('Please log in to use recipe scaling');
+                }
+            } catch (error) {
+                console.error('Error in fetchUser:', error);
+                setError('Authentication error');
+            }
         };
         fetchUser();
     }, []);
 
+    // Get the correct recipe name field
+    const getRecipeName = () => {
+        return recipe?.title || recipe?.recipe_name || recipe?.name || 'Unknown Recipe';
+    };
+
     useEffect(() => {
-        if (recipe && servings !== recipe.original_servings) {
+        // Only scale if we have a user ID and the servings have changed
+        if (userId && recipe && servings !== (recipe.servings || recipe.original_servings || 4)) {
             handleScale();
         }
-    }, [servings]);
+    }, [servings, userId]); // Add userId as dependency
 
     const handleScale = async () => {
-        if (!userId || !recipe) return;
+        // Check if we have all required data
+        if (!userId) {
+            console.error('No user ID available');
+            setError('Please log in to scale recipes');
+            return;
+        }
+
+        if (!recipe) {
+            console.error('No recipe provided');
+            setError('No recipe to scale');
+            return;
+        }
 
         setLoading(true);
+        setError(null);
+
         try {
+            const recipeName = getRecipeName();
+            console.log('Scaling recipe:', recipeName, 'to', servings, 'servings for user:', userId);
+
             const response = await fetch('http://localhost:8000/recipe-scaling/scale-recipe', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    recipe_name: recipe.name,
+                    recipe_name: recipeName,
                     new_servings: servings,
                     user_id: userId
                 })
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                setScaledRecipe(data.recipe);
-                onRecipeUpdate && onRecipeUpdate(data.recipe);
+            if (!response.ok) {
+                const errorData = await response.text();
+                console.error('Error response:', errorData);
+                throw new Error(`Failed to scale recipe: ${response.status}`);
             }
+
+            const data = await response.json();
+            console.log('Scaled recipe data:', data);
+
+            setScaledRecipe(data.recipe);
+            onRecipeUpdate && onRecipeUpdate(data.recipe);
         } catch (error) {
             console.error('Error scaling recipe:', error);
+            setError(error.message);
         } finally {
             setLoading(false);
         }
@@ -63,7 +108,7 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    recipe_name: recipe.name,
+                    recipe_name: getRecipeName(),
                     serving_sizes: [2, 4, 6, 8, 12],
                     user_id: userId
                 })
@@ -86,7 +131,7 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    recipe_name: recipe.name,
+                    recipe_name: getRecipeName(),
                     servings: servings,
                     user_id: userId
                 })
@@ -109,7 +154,7 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    recipe_name: recipe.name,
+                    recipe_name: getRecipeName(),
                     user_id: userId
                 })
             });
@@ -132,7 +177,7 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    recipe_name: recipe.name,
+                    recipe_name: getRecipeName(),
                     target_calories_per_serving: parseFloat(targetCalories),
                     user_id: userId
                 })
@@ -148,10 +193,53 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
         }
     };
 
+    // Format ingredient for display
+    const formatIngredient = (ingredient) => {
+        if (typeof ingredient === 'string') return ingredient;
+
+        const parts = [];
+        if (ingredient.quantity) {
+            parts.push(typeof ingredient.quantity === 'number'
+                ? ingredient.quantity.toFixed(2).replace(/\.00$/, '')
+                : ingredient.quantity);
+        }
+        if (ingredient.unit) {
+            parts.push(ingredient.unit);
+        }
+        if (ingredient.name) {
+            parts.push(ingredient.name);
+        }
+        return parts.join(' ');
+    };
+
     const currentRecipe = scaledRecipe || recipe;
+    const originalServings = recipe?.servings || recipe?.original_servings || 4;
+    const scalingFactor = servings / originalServings;
+
+    // If no user is logged in, show a message
+    if (!userId) {
+        return (
+            <div className="recipe-card mb-4">
+                <div style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    backgroundColor: '#f8f9fa',
+                    borderRadius: '8px',
+                    border: '1px solid #dee2e6'
+                }}>
+                    <h4 style={{ color: '#6c757d', marginBottom: '10px' }}>
+                        🔒 Authentication Required
+                    </h4>
+                    <p style={{ color: '#6c757d' }}>
+                        Please log in to use the recipe scaling feature
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="recipe-card mb-4">
+        <div className="recipe-card mb-4" style={{ position: 'relative' }}>
             <div className="recipe-header">
                 <h3 style={{ margin: 0 }}>🔄 Recipe Scaling & Portion Control</h3>
                 <div className="recipe-actions">
@@ -167,6 +255,19 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
                 </div>
             </div>
 
+            {error && (
+                <div style={{
+                    backgroundColor: '#f8d7da',
+                    color: '#721c24',
+                    padding: '10px',
+                    borderRadius: '6px',
+                    marginBottom: '20px',
+                    border: '1px solid #f5c6cb'
+                }}>
+                    {error}
+                </div>
+            )}
+
             {/* Serving Size Controls */}
             <div style={{
                 display: 'grid',
@@ -179,14 +280,8 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <button
                             onClick={() => setServings(Math.max(1, servings - 1))}
-                            style={{
-                                padding: '8px 12px',
-                                backgroundColor: '#f8f9fa',
-                                border: '2px solid #e9ecef',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                minHeight: 'auto'
-                            }}
+                            className="btn-sm"
+                            style={{ padding: '4px 8px' }}
                         >
                             -
                         </button>
@@ -194,23 +289,12 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
                             type="number"
                             value={servings}
                             onChange={(e) => setServings(Math.max(1, parseInt(e.target.value) || 1))}
-                            min="1"
-                            style={{
-                                width: '80px',
-                                textAlign: 'center',
-                                padding: '8px'
-                            }}
+                            style={{ width: '60px', textAlign: 'center' }}
                         />
                         <button
                             onClick={() => setServings(servings + 1)}
-                            style={{
-                                padding: '8px 12px',
-                                backgroundColor: '#f8f9fa',
-                                border: '2px solid #e9ecef',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                minHeight: 'auto'
-                            }}
+                            className="btn-sm"
+                            style={{ padding: '4px 8px' }}
                         >
                             +
                         </button>
@@ -219,13 +303,13 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
 
                 <div className="form-group">
                     <label>Quick Serving Sizes</label>
-                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
                         {[2, 4, 6, 8, 12].map(size => (
                             <button
                                 key={size}
                                 onClick={() => setServings(size)}
+                                className="btn-sm"
                                 style={{
-                                    padding: '6px 12px',
                                     backgroundColor: servings === size ? '#007bff' : '#f8f9fa',
                                     color: servings === size ? 'white' : '#495057',
                                     border: '2px solid #e9ecef',
@@ -267,18 +351,17 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
                     }}>
                         <div>
                             <strong>Servings:</strong> {servings}
-                            {recipe?.original_servings && servings !== recipe.original_servings && (
+                            {originalServings && servings !== originalServings && (
                                 <span style={{ color: '#666', fontSize: '0.875rem' }}>
-                  {' '}(was {recipe.original_servings})
-                </span>
+                                    {' '}(was {originalServings})
+                                </span>
                             )}
                         </div>
                         <div>
-                            <strong>Scaling Factor:</strong> {scaledRecipe ?
-                            (servings / (recipe?.original_servings || 4)).toFixed(2) + 'x' : '1x'}
+                            <strong>Scaling Factor:</strong> {scalingFactor.toFixed(2)}x
                         </div>
                         <div>
-                            <strong>Total Cost:</strong> ${((currentRecipe.cost_estimate || 0) * servings / (recipe?.original_servings || 4)).toFixed(2)}
+                            <strong>Total Cost:</strong> ${((currentRecipe.cost_estimate || 0) * scalingFactor).toFixed(2)}
                         </div>
                         <div>
                             <strong>Cost/Serving:</strong> ${((currentRecipe.cost_estimate || 0) / servings).toFixed(2)}
@@ -288,7 +371,7 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
             )}
 
             {/* Scaled Ingredients */}
-            {currentRecipe?.ingredients && (
+            {currentRecipe?.ingredients && currentRecipe.ingredients.length > 0 && (
                 <div className="recipe-section">
                     <h4>📝 Scaled Ingredients ({servings} servings)</h4>
                     <div style={{
@@ -306,211 +389,19 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
                                 borderRadius: '6px',
                                 border: '1px solid #e9ecef'
                             }}>
-                <span>
-                  <strong>{ingredient.quantity?.toFixed(2) || ingredient.quantity}</strong> {ingredient.unit} {ingredient.name}
-                </span>
-                                <span style={{ fontSize: '0.875rem', color: '#28a745' }}>
-                  ${((ingredient.quantity || 0) * (ingredient.cost_per_unit || 0)).toFixed(2)}
-                </span>
+                                <span>{formatIngredient(ingredient)}</span>
+                                {ingredient.cost_per_unit && (
+                                    <span style={{ fontSize: '0.875rem', color: '#28a745' }}>
+                                        ${((ingredient.quantity || 0) * (ingredient.cost_per_unit || 0)).toFixed(2)}
+                                    </span>
+                                )}
                             </div>
                         ))}
                     </div>
                 </div>
             )}
 
-            {/* Nutrition Comparison */}
-            {nutritionComparison && (
-                <div className="recipe-section">
-                    <h4>📈 Nutrition Comparison Across Serving Sizes</h4>
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                            <tr style={{ backgroundColor: '#f8f9fa' }}>
-                                <th style={{ padding: '8px', border: '1px solid #e9ecef' }}>Servings</th>
-                                <th style={{ padding: '8px', border: '1px solid #e9ecef' }}>Cal/Serving</th>
-                                <th style={{ padding: '8px', border: '1px solid #e9ecef' }}>Protein/Serving</th>
-                                <th style={{ padding: '8px', border: '1px solid #e9ecef' }}>Total Cost</th>
-                                <th style={{ padding: '8px', border: '1px solid #e9ecef' }}>Cost/Serving</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            {Object.entries(nutritionComparison).map(([key, data]) => (
-                                <tr key={key} style={{
-                                    backgroundColor: data.total_servings === servings ? '#e3f2fd' : 'white'
-                                }}>
-                                    <td style={{ padding: '8px', border: '1px solid #e9ecef', textAlign: 'center' }}>
-                                        {data.total_servings}
-                                    </td>
-                                    <td style={{ padding: '8px', border: '1px solid #e9ecef', textAlign: 'center' }}>
-                                        {data.per_serving?.calories || 0}
-                                    </td>
-                                    <td style={{ padding: '8px', border: '1px solid #e9ecef', textAlign: 'center' }}>
-                                        {data.per_serving?.protein || 0}g
-                                    </td>
-                                    <td style={{ padding: '8px', border: '1px solid #e9ecef', textAlign: 'center' }}>
-                                        ${data.total_cost?.toFixed(2) || '0.00'}
-                                    </td>
-                                    <td style={{ padding: '8px', border: '1px solid #e9ecef', textAlign: 'center' }}>
-                                        ${data.cost_per_serving?.toFixed(2) || '0.00'}
-                                    </td>
-                                </tr>
-                            ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-
-            {/* Grocery List */}
-            {groceryList && (
-                <div className="recipe-section">
-                    <h4>🛒 Grocery List ({servings} servings)</h4>
-                    <div style={{
-                        marginBottom: '12px',
-                        padding: '8px 12px',
-                        backgroundColor: '#d4edda',
-                        borderRadius: '6px',
-                        color: '#155724'
-                    }}>
-                        <strong>Total Cost: ${groceryList.total_cost?.toFixed(2)}</strong> •
-                        <span> {groceryList.total_items} items</span>
-                    </div>
-
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-                        gap: '8px'
-                    }}>
-                        {groceryList.grocery_list?.map((item, index) => (
-                            <div key={index} style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '8px 12px',
-                                backgroundColor: '#f8f9fa',
-                                borderRadius: '6px',
-                                border: '1px solid #e9ecef'
-                            }}>
-                                <div>
-                                    <div><strong>{item.name}</strong></div>
-                                    <div style={{ fontSize: '0.875rem', color: '#666' }}>
-                                        {item.quantity} {item.unit}
-                                    </div>
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                    <div style={{ color: '#28a745', fontWeight: 'bold' }}>
-                                        ${item.total_cost?.toFixed(2)}
-                                    </div>
-                                    <div style={{ fontSize: '0.875rem', color: '#666' }}>
-                                        ${item.cost_per_unit?.toFixed(2)}/{item.unit}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Recipe Analytics */}
-            {analytics && (
-                <div className="recipe-section">
-                    <h4>📊 Recipe Analytics</h4>
-
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                        gap: '16px',
-                        marginBottom: '16px'
-                    }}>
-                        <div style={{
-                            padding: '16px',
-                            backgroundColor: '#f8f9fa',
-                            borderRadius: '8px',
-                            textAlign: 'center'
-                        }}>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#007bff' }}>
-                                {analytics.total_time} min
-                            </div>
-                            <div style={{ fontSize: '0.875rem', color: '#666' }}>Total Time</div>
-                        </div>
-
-                        <div style={{
-                            padding: '16px',
-                            backgroundColor: '#f8f9fa',
-                            borderRadius: '8px',
-                            textAlign: 'center'
-                        }}>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#28a745' }}>
-                                ${analytics.cost_analysis?.cost_per_calorie?.toFixed(4)}
-                            </div>
-                            <div style={{ fontSize: '0.875rem', color: '#666' }}>Cost per Calorie</div>
-                        </div>
-
-                        <div style={{
-                            padding: '16px',
-                            backgroundColor: '#f8f9fa',
-                            borderRadius: '8px',
-                            textAlign: 'center'
-                        }}>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ffc107' }}>
-                                {analytics.ingredient_count}
-                            </div>
-                            <div style={{ fontSize: '0.875rem', color: '#666' }}>Ingredients</div>
-                        </div>
-                    </div>
-
-                    {/* Macro Breakdown */}
-                    {analytics.macro_percentages && (
-                        <div>
-                            <h5>Macronutrient Breakdown</h5>
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(3, 1fr)',
-                                gap: '12px'
-                            }}>
-                                {Object.entries(analytics.macro_percentages).map(([macro, percentage]) => (
-                                    <div key={macro} style={{ textAlign: 'center' }}>
-                                        <div style={{
-                                            width: '60px',
-                                            height: '60px',
-                                            borderRadius: '50%',
-                                            background: `conic-gradient(
-                        ${macro === 'protein_percent' ? '#e91e63' :
-                                                macro === 'carbs_percent' ? '#2196f3' : '#ff9800'} 
-                        ${percentage * 3.6}deg, 
-                        #e9ecef 0deg)`,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            margin: '0 auto 8px',
-                                            position: 'relative'
-                                        }}>
-                                            <div style={{
-                                                width: '40px',
-                                                height: '40px',
-                                                backgroundColor: 'white',
-                                                borderRadius: '50%',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                fontSize: '12px',
-                                                fontWeight: '600'
-                                            }}>
-                                                {percentage?.toFixed(0)}%
-                                            </div>
-                                        </div>
-                                        <div style={{ fontSize: '0.875rem', textTransform: 'capitalize' }}>
-                                            {macro.replace('_percent', '')}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Action Buttons */}
+            {/* Additional action buttons */}
             <div style={{
                 display: 'flex',
                 gap: '12px',
@@ -520,110 +411,10 @@ const RecipeScaling = ({ recipe, onRecipeUpdate }) => {
                 <button
                     onClick={() => setShowUnitConverter(!showUnitConverter)}
                     className="btn-secondary"
-                    style={{ flex: '1', minWidth: '150px' }}
                 >
                     🔄 Convert Units
                 </button>
-
-                <button
-                    onClick={generateNutritionComparison}
-                    className="btn-primary"
-                    style={{ flex: '1', minWidth: '150px' }}
-                >
-                    📈 Compare Nutrition
-                </button>
-
-                <button
-                    onClick={generateGroceryList}
-                    className="btn-success"
-                    style={{ flex: '1', minWidth: '150px' }}
-                >
-                    🛒 Generate Grocery List
-                </button>
             </div>
-
-            {/* Unit Converter Panel */}
-            {showUnitConverter && (
-                <div style={{
-                    marginTop: '20px',
-                    padding: '16px',
-                    backgroundColor: '#fff3cd',
-                    borderRadius: '8px',
-                    border: '1px solid #ffeaa7'
-                }}>
-                    <h5>🔄 Unit Converter</h5>
-                    <p style={{ fontSize: '0.875rem', color: '#856404' }}>
-                        Convert ingredients to different units. Changes will be applied to the recipe.
-                    </p>
-
-                    {currentRecipe?.ingredients?.map((ingredient, index) => (
-                        <div key={index} style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            marginBottom: '8px',
-                            padding: '8px',
-                            backgroundColor: 'white',
-                            borderRadius: '6px'
-                        }}>
-                            <span style={{ flex: 1 }}>{ingredient.name}</span>
-                            <span style={{ width: '80px' }}>{ingredient.quantity} {ingredient.unit}</span>
-                            <select
-                                onChange={(e) => {
-                                    if (e.target.value) {
-                                        setUnitConversions(prev => ({
-                                            ...prev,
-                                            [ingredient.name]: e.target.value
-                                        }));
-                                    }
-                                }}
-                                style={{ width: '100px', padding: '4px' }}
-                            >
-                                <option value="">Convert to...</option>
-                                <option value="cups">cups</option>
-                                <option value="ml">ml</option>
-                                <option value="g">grams</option>
-                                <option value="oz">oz</option>
-                                <option value="lb">pounds</option>
-                                <option value="tsp">tsp</option>
-                                <option value="tbsp">tbsp</option>
-                            </select>
-                        </div>
-                    ))}
-
-                    {Object.keys(unitConversions).length > 0 && (
-                        <button
-                            onClick={async () => {
-                                try {
-                                    const response = await fetch('http://localhost:8000/recipe-scaling/convert-units', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            recipe_name: recipe.name,
-                                            unit_conversions: unitConversions,
-                                            user_id: userId
-                                        })
-                                    });
-
-                                    if (response.ok) {
-                                        alert('Units converted successfully!');
-                                        setUnitConversions({});
-                                        setShowUnitConverter(false);
-                                        // Refresh the recipe
-                                        handleScale();
-                                    }
-                                } catch (error) {
-                                    console.error('Error converting units:', error);
-                                }
-                            }}
-                            className="btn-warning"
-                            style={{ marginTop: '12px' }}
-                        >
-                            Apply Unit Conversions
-                        </button>
-                    )}
-                </div>
-            )}
 
             {loading && (
                 <div style={{
