@@ -354,30 +354,73 @@ export default function HomePage() {
     setAddingToNutrition(prev => ({ ...prev, [recipeIndex]: true }));
 
     try {
-      // FIX: Use 'macros' instead of 'macro_estimate' and handle both
-      const macros = recipe.macro_estimate || recipe.macros || {
-        calories: 450,
-        protein: '25g',
-        carbs: '35g',
-        fat: '15g',
-        fiber: '5g'
+      // Extract actual macro values from the recipe
+      // Check multiple possible locations for macro data
+      let macros = recipe.macros || recipe.macro_estimate || recipe.nutrition || {};
+
+      // If macros is a string, try to parse it
+      if (typeof macros === 'string') {
+        try {
+          macros = JSON.parse(macros);
+        } catch (e) {
+          console.error('Failed to parse macros:', e);
+          macros = {};
+        }
+      }
+
+      // Parse individual macro values from the recipe if available
+      // Look for them in different possible formats
+      const extractMacroValue = (value) => {
+        if (typeof value === 'number') return value;
+        if (typeof value === 'string') {
+          // Extract number from strings like "25g" or "25"
+          const match = value.match(/(\d+\.?\d*)/);
+          return match ? parseFloat(match[1]) : 0;
+        }
+        return 0;
       };
 
-      const recipeData = {
-        recipe_name: recipe.title || `Recipe ${recipeIndex + 1}`,
-        macros: macros,  // Use 'macros' key consistently
-        cost_estimate: recipe.cost_estimate || 8.50,
-        cuisine: recipe.cuisine || 'Unknown',
-        ingredients: recipe.ingredients || [],
-        directions: recipe.directions || []
+      // Build proper macro object from actual recipe data
+      const finalMacros = {
+        calories: extractMacroValue(macros.calories || recipe.calories || 0),
+        protein: extractMacroValue(macros.protein || recipe.protein || 0),
+        carbs: extractMacroValue(macros.carbs || recipe.carbs || macros.carbohydrates || recipe.carbohydrates || 0),
+        fat: extractMacroValue(macros.fat || recipe.fat || macros.fats || recipe.fats || 0),
+        fiber: extractMacroValue(macros.fiber || recipe.fiber || 0)
       };
+
+      // Only use defaults if we have NO macro data at all
+      const hasAnyMacroData = finalMacros.calories > 0 ||
+          finalMacros.protein > 0 ||
+          finalMacros.carbs > 0 ||
+          finalMacros.fat > 0;
+
+      if (!hasAnyMacroData) {
+        console.warn('No macro data found for recipe:', recipe.title);
+        // Don't use hardcoded defaults - instead, alert the user
+        alert('This recipe does not have nutrition information. Please regenerate it or enter custom values.');
+        setAddingToNutrition(prev => ({ ...prev, [recipeIndex]: false }));
+        return;
+      }
+
+      const recipeData = {
+        recipe_name: recipe.title || recipe.recipe_name || `Recipe ${recipeIndex + 1}`,
+        macros: finalMacros,
+        cost_estimate: parseFloat(recipe.cost_estimate || recipe.cost || 0),
+        cuisine: recipe.cuisine || 'Various',
+        ingredients: recipe.ingredients || [],
+        directions: recipe.directions || recipe.instructions || []
+      };
+
+      console.log('Sending recipe data to nutrition log:', recipeData);
 
       const result = await fetch('http://localhost:8000/quick-log-recipe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: user.id,
-          recipe_data: recipeData
+          recipe_data: recipeData,
+          date: new Date().toISOString().split('T')[0] // Today's date
         })
       });
 
@@ -412,6 +455,7 @@ export default function HomePage() {
       setAddingToNutrition(prev => ({ ...prev, [recipeIndex]: false }));
     }
   };
+
 
   const handleSignOut = async () => {
     try {
@@ -834,9 +878,44 @@ export default function HomePage() {
 
                           {/* Nutrition Preview */}
                           {(() => {
-                            // FIX: Handle both macro_estimate and macros
-                            const macros = recipe.macro_estimate || recipe.macros || {};
-                            return macros && Object.keys(macros).length > 0 && (
+                            // Extract actual macro values from the recipe
+                            let macros = recipe.macro_estimate || recipe.macros || recipe.nutrition || {};
+
+                            // If macros is a string, try to parse it
+                            if (typeof macros === 'string') {
+                              try {
+                                macros = JSON.parse(macros);
+                              } catch (e) {
+                                console.error('Failed to parse macros:', e);
+                                macros = {};
+                              }
+                            }
+
+                            // Helper function to extract numeric values
+                            const extractMacroValue = (value) => {
+                              if (typeof value === 'number') return value;
+                              if (typeof value === 'string') {
+                                const match = value.match(/(\d+\.?\d*)/);
+                                return match ? parseFloat(match[1]) : 0;
+                              }
+                              return 0;
+                            };
+
+                            // Build proper macro object from actual recipe data
+                            const displayMacros = {
+                              calories: extractMacroValue(macros.calories || recipe.calories || 0),
+                              protein: extractMacroValue(macros.protein || recipe.protein || 0),
+                              carbs: extractMacroValue(macros.carbs || recipe.carbs || macros.carbohydrates || recipe.carbohydrates || 0),
+                              fat: extractMacroValue(macros.fat || recipe.fat || macros.fats || recipe.fats || 0)
+                            };
+
+                            // Only show nutrition info if we have actual data
+                            const hasNutritionData = displayMacros.calories > 0 ||
+                                displayMacros.protein > 0 ||
+                                displayMacros.carbs > 0 ||
+                                displayMacros.fat > 0;
+
+                            return hasNutritionData ? (
                                 <div style={{
                                   background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
                                   padding: '16px',
@@ -862,18 +941,31 @@ export default function HomePage() {
                                     textAlign: 'center'
                                   }}>
                                     <div style={{ fontWeight: '600' }}>
-                                      <strong style={{ color: '#667eea' }}>{macros.calories || 450}</strong> cal
+                                      <strong style={{ color: '#667eea' }}>{displayMacros.calories}</strong> cal
                                     </div>
                                     <div style={{ fontWeight: '600' }}>
-                                      <strong style={{ color: '#f5576c' }}>{String(macros.protein || '25g').replace('g', '')}g</strong> protein
+                                      <strong style={{ color: '#f5576c' }}>{displayMacros.protein}g</strong> protein
                                     </div>
                                     <div style={{ fontWeight: '600' }}>
-                                      <strong style={{ color: '#4ade80' }}>{String(macros.carbs || '35g').replace('g', '')}g</strong> carbs
+                                      <strong style={{ color: '#4ade80' }}>{displayMacros.carbs}g</strong> carbs
                                     </div>
                                     <div style={{ fontWeight: '600' }}>
-                                      <strong style={{ color: '#facc15' }}>{String(macros.fat || '15g').replace('g', '')}g</strong> fat
+                                      <strong style={{ color: '#fb923c' }}>{displayMacros.fat}g</strong> fat
                                     </div>
                                   </div>
+                                </div>
+                            ) : (
+                                <div style={{
+                                  background: '#f8f9fa',
+                                  padding: '16px',
+                                  borderRadius: '12px',
+                                  marginBottom: '16px',
+                                  border: '1px solid #dee2e6',
+                                  textAlign: 'center',
+                                  color: '#6c757d',
+                                  fontSize: '0.85rem'
+                                }}>
+                                  No nutrition information available
                                 </div>
                             );
                           })()}
